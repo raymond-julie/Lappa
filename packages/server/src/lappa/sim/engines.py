@@ -261,12 +261,47 @@ class SimpleArm(BaseEngine):
         )
 
 
+class Mecanum4W(BaseEngine):
+    """Holonomic mecanum base: independent vx, vy, yaw (tracked-style demo id alias)."""
+
+    kind = "mecanum_4w"
+
+    def __init__(self, demo: str):
+        super().__init__(demo)
+        self.state.joints = [0.0, 0.0, 0.0, 0.0]  # FL FR RL RR wheel spins
+        self.state.message = "mecanum holonomic"
+
+    def _integrate(self, dt: float) -> None:
+        vx = self.state.twist.linear_x
+        vy = self.state.twist.linear_y
+        w = self.state.twist.angular_z
+        th = self.state.theta
+        c, s = math.cos(th), math.sin(th)
+        # body → world
+        self.state.x += (c * vx - s * vy) * dt
+        self.state.y += (s * vx + c * vy) * dt
+        self.state.theta = _wrap(th + w * dt)
+        r = 0.05
+        # inverse kinematics-ish wheel rates for viz
+        lx, ly = 0.2, 0.18  # half length / width
+        wheels = [
+            vx - vy - (lx + ly) * w,  # FL
+            vx + vy + (lx + ly) * w,  # FR
+            vx + vy - (lx + ly) * w,  # RL
+            vx - vy + (lx + ly) * w,  # RR
+        ]
+        for i, wi in enumerate(wheels):
+            self.state.joints[i] = _wrap(self.state.joints[i] + (wi / r) * dt)
+
+
 ENGINES: dict[str, type[BaseEngine]] = {
     "diff_drive_2w": DiffDrive2W,
     "omni_3w": Omni3W,
     "tricycle_3w": Tricycle3W,
     "ackermann_4w": Ackermann4W,
     "simple_arm": SimpleArm,
+    "mecanum_4w": Mecanum4W,
+    "tracked_base": Mecanum4W,  # alias for tracked-style holonomic demos
 }
 
 
