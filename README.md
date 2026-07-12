@@ -13,42 +13,27 @@ Org: [mergeos-bounties](https://github.com/mergeos-bounties) · MergeOS MRG boun
 
 ## Screenshots
 
-Live capture from `lappa serve` (native sim, no host ROS2):
+Real captures from running the product demo (Lappa).
 
-### IDE overview — robot demos
+![IDE overview](docs/screenshots/ide-overview.png)
 
-![Lappa IDE overview with demo list](docs/screenshots/ide-overview.png)
+*IDE overview*
 
-### Differential drive (2-wheel)
+![Diff drive sim](docs/screenshots/sim-diff-drive.png)
 
-![Diff drive 2w sim with trail](docs/screenshots/sim-diff-drive.png)
+*Diff drive sim*
 
-### Omnidirectional 3-wheel
+![Live trajectory · diff drive](docs/screenshots/demo-traj-diff_drive_2w.png)
 
-![Omni 3w holonomic sim](docs/screenshots/sim-omni-3w.png)
+*Live trajectory · diff drive*
 
-### Planar arm (2-DOF)
+![Live trajectory · omni 3w](docs/screenshots/demo-traj-omni_3w.png)
 
-![Simple arm kinematics](docs/screenshots/sim-arm.png)
+*Live trajectory · omni 3w*
 
-### Docker show mode panel
+![Demo packages list](docs/screenshots/demo-packages.png)
 
-![Docker show mode status](docs/screenshots/docker-panel.png)
-
-### Tricycle 3-wheel
-
-![Tricycle steered base](docs/screenshots/sim-tricycle.png)
-
-Re-capture locally:
-
-```powershell
-# terminal 1
-cd packages/server
-lappa serve --port 8840
-
-# terminal 2
-python scripts/capture_screenshots.py
-```
+*Demo packages list*
 
 ## Why Lappa
 
