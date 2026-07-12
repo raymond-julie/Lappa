@@ -82,6 +82,49 @@ Captures from live product demos and the IDE.
 ---
 
 
+
+## Desktop GUI (Qt)
+
+Modern **PySide6** shell for simulation, demos, 3D models, package bundles, and ROS2/Docker — native desktop (alongside the browser IDE).
+
+```powershell
+cd packages\server
+pip install -e ".[gui]"
+lappa-gui
+# or: lappa gui
+```
+
+<p align="center">
+  <img src="docs/screenshots/gui-sim.png" alt="Lappa GUI — Simulation" width="100%" />
+</p>
+
+*Simulation + teleop canvas*
+
+<p align="center">
+  <img src="docs/screenshots/gui-demos.png" alt="Lappa GUI — Demos" width="100%" />
+</p>
+
+*Robot demos*
+
+<p align="center">
+  <img src="docs/screenshots/gui-models.png" alt="Lappa GUI — 3D models" width="100%" />
+</p>
+
+*3D mesh library & build-robot*
+
+<p align="center">
+  <img src="docs/screenshots/gui-packages.png" alt="Lappa GUI — Packages" width="100%" />
+</p>
+
+*Package bundles*
+
+<p align="center">
+  <img src="docs/screenshots/gui-ros2.png" alt="Lappa GUI — ROS2" width="100%" />
+</p>
+
+*ROS2 distro & Docker status*
+
+
 ## Diagrams
 
 System architecture and workflow — shown full-width below.  

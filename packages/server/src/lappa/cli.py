@@ -36,6 +36,14 @@ def version_cmd() -> None:
     rprint({"version": __version__})
 
 
+@app.command("gui")
+def gui_cmd() -> None:
+    """Launch modern Qt desktop shell (pip install -e '.[gui]')."""
+    from lappa.gui.app import main as gui_main
+
+    raise SystemExit(gui_main())
+
+
 @app.command("demo")
 def demo_cmd() -> None:
     """Offline smoke: sim engines + ROS2 version + bundle + 3D mesh attach."""
