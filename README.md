@@ -1,45 +1,36 @@
 # Lappa
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![Version](https://img.shields.io/badge/version-0.4.0-0E8A16.svg)](packages/server/pyproject.toml)
-[![Qt GUI](https://img.shields.io/badge/GUI-PySide6-41CD52.svg)](packages/server/src/lappa/gui/)
+[![Version](https://img.shields.io/badge/version-0.4.13-0E8A16.svg)](packages/server/pyproject.toml)
+[![GUI-PySide6](https://img.shields.io/badge/GUI-PySide6-41CD52.svg)](packages/server/src/lappa/gui/)
 [![ROS2](https://img.shields.io/badge/ROS2-Humble%20%7C%20Jazzy%20%7C%20Rolling-22314E.svg)](https://docs.ros.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![MergeOS](https://img.shields.io/badge/MergeOS-bounties-5319E7.svg)](https://github.com/mergeos-bounties)
 
-**Lappa** is a **ROS2 package IDE** for Windows-first (and Linux) workflows: open a package, edit with hot-reload, **simulate offline**, build **fitted multi-link 3D robots**, and optionally run a real ROS2 container — without installing a full ROS2 desktop on the host.
+**Lappa** is a **ROS2 package IDE** for Windows-first (and Linux) workflows: open a demo package, **simulate offline** in a native **Qt (PySide6)** desktop app, build **fitted multi-link 3D robots**, bundle colcon zips, and optionally run a real ROS2 container — **without installing a full ROS2 desktop on the host**.
 
-| Layer | Role |
-| --- | --- |
-| **Lappa IDE** | Browser IDE — Monaco editor, explorer, teleop, **2D / WebGL 3D** sim, package bundler, 3D model lab |
-| **Lappa Server** | CLI + FastAPI — workspace, multi-distro ROS2, packager, mesh fit, native kinematics, Docker bridge |
-| **Desktop GUI** | Native **PySide6** app (`lappa-gui`) for sim, demos, models, packages, ROS2 status |
-| **Demos** | Colcon-ready packages: diff-drive, omni, tricycle, ackermann, planar arm (+ meshes & URDF) |
-| **Docker runtime** | Optional show mode: **Humble / Iron / Jazzy / Kilted / Rolling** |
-
-**Product:** [mergeos-bounties/Lappa](https://github.com/mergeos-bounties/Lappa) · MergeOS project `prj_0352` · **MIT**
+**Primary UI:** native desktop **`lappa-gui`** (not the old browser shell).  
+**Product:** [mergeos-bounties/Lappa](https://github.com/mergeos-bounties/Lappa)
 
 ---
 
 ## Table of contents
 
 - [Highlights](#highlights)
-- [Screenshots](#screenshots)
-- [Desktop GUI (Qt)](#desktop-gui-qt)
+- [Desktop GUI (Qt) — primary](#desktop-gui-qt--primary)
 - [Quick start](#quick-start)
 - [CLI reference](#cli-reference)
 - [Robot demos](#robot-demos)
-- [3D stack](#3d-stack)
+- [3D models & packager](#3d-models--packager)
 - [ROS2 versions](#ros2-versions)
-- [Package bundles](#package-bundles)
-- [HTTP API](#http-api)
+- [HTTP API (optional)](#http-api-optional)
 - [Docker (optional)](#docker-optional)
 - [Download binaries](#download-binaries)
 - [Diagrams](#diagrams)
 - [Repository layout](#repository-layout)
 - [Development](#development)
-- [Roadmap](#roadmap)
 - [MergeOS bounties](#mergeos-bounties)
+- [Tiếng Việt](#tiếng-việt)
 - [License](#license)
 
 ---
@@ -48,57 +39,44 @@
 
 | Capability | What you get |
 | --- | --- |
-| **Offline native sim** | Diff-drive, omni, tricycle, ackermann, arm — pose, twist, synthetic lidar, **wheel joint odometry** |
-| **Full 3D** | Auto-fit mesh AABB, multi-link robots (chassis + wheels + lidar), clean URDF, WebGL orbit viewer |
-| **No host ROS2 required** | Demos run without installing ROS2 desktop on Windows/Linux host |
-| **Multi-distro targets** | Humble · Iron · Jazzy · Kilted · Rolling — Dockerfiles rewrite for the selected distro |
-| **Package bundler** | Zip one or many packages with `lappa_manifest.json` for colcon |
-| **Hot reload** | File watch → sim session notified when you save in the IDE |
-| **Docker show mode** | Optional container mount + runtime when Docker Desktop is available |
-| **Browser IDE** | Activity bar, split panes, dark theme, teleop (WASD), 2D/3D toggle |
-| **Desktop GUI** | PySide6 shell (`lappa-gui`) for offline demos without a browser |
+| **Qt desktop (primary)** | `lappa-gui` — Simulation, Demos, 3D models, Packages, ROS2/Docker |
+| **Offline native sim** | Diff-drive, omni, tricycle, ackermann, planar arm — pose, twist, lidar, joints |
+| **Lidar obstacles** | Default obstacle map for denser synthetic scans |
+| **3D mesh fit** | Procedural OBJ library + AABB fit + multi-link `build-robot` |
+| **No host ROS2 required** | Demos run without ROS2 desktop on Windows/Linux |
+| **Multi-distro targets** | Humble · Iron · Jazzy · Kilted · Rolling (Docker rewrite) |
+| **Package bundler** | Zip packages with `lappa_manifest.json` for colcon |
+| **CLI + optional API** | `lappa` Typer CLI; FastAPI for automation when needed |
 
 ---
 
-## Screenshots
+## Desktop GUI (Qt) — primary
 
-Captures from live product demos and the IDE.
-
-| IDE & Docker | Mobile base sims |
-| :---: | :---: |
-| ![IDE overview](docs/screenshots/ide-overview.png) | ![Diff drive](docs/screenshots/sim-diff-drive.png) |
-| *IDE overview — explorer, Monaco, sim* | *Differential drive 2W* |
-| ![Docker panel](docs/screenshots/docker-panel.png) | ![Omni 3W](docs/screenshots/sim-omni-3w.png) |
-| *Docker show mode panel* | *Holonomic omni 3W* |
-
-| More robots | Trajectories & packages |
-| :---: | :---: |
-| ![Tricycle](docs/screenshots/sim-tricycle.png) | ![Trajectory diff](docs/screenshots/demo-traj-diff_drive_2w.png) |
-| *Tricycle / steered base* | *Live trajectory · diff drive* |
-| ![Arm](docs/screenshots/sim-arm.png) | ![Trajectory omni](docs/screenshots/demo-traj-omni_3w.png) |
-| *Planar arm FK* | *Live trajectory · omni* |
-| | ![Demo packages](docs/screenshots/demo-packages.png) |
-| | *Demo package list (CLI/API)* |
-
-> **3D WebGL:** after `lappa model build-robot <demo>` (or IDE → Models → **Build full 3D robot**), open the sim panel and switch **2D → 3D** for orbit view of chassis, wheels, and lidar.
-
----
-
-## Desktop GUI (Qt)
-
-Modern **PySide6** shell for simulation, demos, 3D models, package bundles, and ROS2/Docker — native desktop alongside the browser IDE.
+Lappa’s product surface is a **PySide6** desktop app. Use this path for day-to-day work.
 
 ```powershell
 cd packages\server
-pip install -e ".[gui]"
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -e ".[gui,dev]"
+
 lappa-gui
-# or: lappa gui
+# or:
+lappa gui
 ```
+
+| Nav page | Purpose |
+| --- | --- |
+| **Simulation** | Start/stop native sim, teleop, 2D canvas + lidar, trajectory |
+| **Demos** | Pick `diff_drive_2w`, `omni_3w`, `tricycle_3w`, `ackermann_4w`, `simple_arm` |
+| **3D models** | Build aligned multi-link robot meshes for a demo package |
+| **Packages** | List / create colcon-ready zip bundles |
+| **ROS2 / Docker** | Select distro, Docker status |
 
 <p align="center">
   <img src="docs/screenshots/gui-sim.png" alt="Lappa GUI — Simulation" width="100%" />
 </p>
-<p align="center"><em>Simulation + teleop canvas</em></p>
+<p align="center"><em>Simulation — native kinematics canvas</em></p>
 
 <p align="center">
   <img src="docs/screenshots/gui-demos.png" alt="Lappa GUI — Demos" width="100%" />
@@ -120,11 +98,13 @@ lappa-gui
 </p>
 <p align="center"><em>ROS2 distro & Docker status</em></p>
 
+> **Note:** An older browser IDE (`lappa serve` / `lappa desktop`) may still start for API demos and legacy screenshots. **New work targets `lappa-gui`.** Prefer Qt for all product UX and bounty evidence.
+
 ---
 
 ## Quick start
 
-### From source (recommended for development)
+### Recommended — Qt desktop
 
 **Windows (PowerShell):**
 
@@ -132,14 +112,10 @@ lappa-gui
 cd packages\server
 python -m venv .venv
 .\.venv\Scripts\activate
-pip install -e ".[dev,api,gui]"
+pip install -e ".[gui,dev]"
 
 lappa version
 lappa demo
-lappa serve --port 8840
-# or open browser automatically:
-lappa desktop
-# or native desktop:
 lappa-gui
 ```
 
@@ -149,20 +125,28 @@ lappa-gui
 cd packages/server
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev,api,gui]"
+pip install -e ".[gui,dev]"
 lappa demo
-lappa serve --port 8840
+lappa-gui
 ```
 
-Open **http://127.0.0.1:8840** — demos load in the explorer; press **▶ Run Sim** and teleop with WASD / QE (strafe).
-
-### Offline smoke demo
+### Offline smoke (no GUI)
 
 ```text
 $ lappa demo
 demos: 5  (ackermann_4w, diff_drive_2w, omni_3w, simple_arm, tricycle_3w)
-3d_robot: diff_drive_2w · links=5 · scene_nodes=4
+3d_robot: diff_drive_2w · links=… · scene_nodes=…
 bundle + trajectory CSV · Lappa demo complete
+```
+
+### Optional — CLI automation / API only
+
+```powershell
+pip install -e ".[dev,api]"
+lappa demos list
+lappa sim start --demo diff_drive_2w
+lappa model build-robot diff_drive_2w
+lappa serve --port 8840   # FastAPI + optional static assets
 ```
 
 ---
@@ -171,11 +155,9 @@ bundle + trajectory CSV · Lappa demo complete
 
 | Command | Description |
 | --- | --- |
-| `lappa version` | Package version |
-| `lappa demo` | Offline smoke: all engines + 3D robot build + bundle + trajectory |
-| `lappa gui` / `lappa-gui` | **Qt desktop app** (needs `.[gui]`) |
-| `lappa serve [--host] [--port] [--open]` | FastAPI + static IDE |
-| `lappa desktop` | Serve and open the system browser |
+| `lappa version` | Package version (**0.4.13**) |
+| `lappa demo` | Offline smoke: engines + 3D robot + bundle + trajectory |
+| `lappa gui` / **`lappa-gui`** | **Qt desktop app** (needs `.[gui]`) |
 | `lappa demos list` | List robot demos |
 | `lappa workspace open <path\|demo>` | Set active package |
 | `lappa sim start --demo <id>` | Start native sim session |
@@ -183,11 +165,13 @@ bundle + trajectory CSV · Lappa demo complete
 | `lappa ros2 list \| set \| get` | Target ROS2 distro |
 | `lappa package list \| bundle \| bundles` | Colcon-ready zip packs |
 | `lappa model presets \| create \| list` | Procedural OBJ library |
-| `lappa model fit` | Auto-scale mesh AABB to a target box |
+| `lappa model fit` | Auto-scale mesh AABB |
 | `lappa model attach` | Fit-attach mesh onto a package link / URDF |
 | `lappa model build-robot` | Full multi-link robot (chassis + wheels + lidar) |
 | `lappa model scene` | Print `scene3d` JSON for a package |
 | `lappa docker status` | Docker availability / distro |
+| `lappa serve` | Optional FastAPI server (automation / legacy assets) |
+| `lappa desktop` | Optional: serve + open system browser |
 
 ```powershell
 lappa demos list
@@ -196,7 +180,6 @@ lappa sim start --demo diff_drive_2w
 lappa ros2 set jazzy
 lappa package bundle -p diff_drive_2w -p omni_3w --distro humble
 lappa model build-robot diff_drive_2w
-lappa model scene diff_drive_2w
 ```
 
 ---
@@ -213,13 +196,18 @@ Each entry under `packages/demos/` is a **ROS2-style package** (`package.xml`, `
 | `ackermann_4w` | Ackermann car-like | Chassis + 4 wheels + lidar | Wheelbase + steer |
 | `simple_arm` | Planar 2-DOF | Base + link1 + link2 | Joint angles / FK tip |
 
-Sim state includes `x, y, theta`, `twist`, synthetic `lidar`, and **`joints`** (wheel spin / arm angles) for the 3D viewer.
+Sim state includes `x, y, theta`, `twist`, synthetic `lidar` (with obstacles), and **`joints`**.
+
+| | |
+| :---: | :---: |
+| ![Diff drive](docs/screenshots/sim-diff-drive.png) | ![Omni](docs/screenshots/sim-omni-3w.png) |
+| *Diff drive (legacy web capture)* | *Omni 3W* |
+| ![Tricycle](docs/screenshots/sim-tricycle.png) | ![Arm](docs/screenshots/sim-arm.png) |
+| *Tricycle* | *Planar arm* |
 
 ---
 
-## 3D stack
-
-Lappa treats 3D as a first-class workflow: **generate → fit → assemble → view → bundle**.
+## 3D models & packager
 
 ### Mesh library & auto-fit
 
@@ -238,67 +226,29 @@ lappa model create chassis -n my_chassis
 lappa model create wheel -n my_wheel
 lappa model fit my_chassis --sx 0.42 --sy 0.30 --sz 0.10
 lappa model attach diff_drive_2w my_chassis --auto-fit --link base_link
-```
-
-**Fit semantics**
-
-1. Parse OBJ vertices → axis-aligned bounding box (AABB).
-2. Compute per-axis (or uniform) scale so size matches the target.
-3. Center the mesh at the origin so URDF `xyz` is a true link offset.
-4. Write fitted OBJ into `package/meshes/` and update `urdf/robot.urdf` via **visual upsert**.
-
-### Build a full aligned robot
-
-```powershell
 lappa model build-robot diff_drive_2w
-lappa model build-robot omni_3w
-lappa model build-robot ackermann_4w
 ```
 
-Produces:
+**Fit semantics:** parse OBJ → AABB → scale/center → write into `package/meshes/` and upsert URDF visuals.
+
+### Full aligned robot
 
 ```text
 base_footprint
   └── base_link          (chassis mesh)
-        ├── wheel_*      (continuous joints, kinematic xyz / yaw)
-        └── lidar_link   (fixed joint)   # mobile bases
+        ├── wheel_*      (continuous joints)
+        └── lidar_link   (fixed)   # mobile bases
 ```
 
-- Wheel centers sit on the ground plane relative to footprint height.
-- Attachments registry: `meshes/attachments.json`.
-- Valid multi-link URDF (no orphan duplicate links).
+### Package bundles
 
-### IDE 3D viewer
-
-1. Open a demo package.
-2. **Models** → **Build full 3D robot** (or use CLI).
-3. Sim panel → toggle **3D**.
-4. **Orbit:** drag to rotate · mouse wheel to zoom.
-5. Teleop (WASD) — wheels animate from joint odometry.
-
-### scene3d contract
-
-`GET /api/packages/{name}/scene3d` returns a viewer-ready graph (ROS REP-103: *x* forward, *y* left, *z* up; WebGL maps ROS → Three.js Y-up automatically).
-
-```json
-{
-  "package": "diff_drive_2w",
-  "frame": "base_footprint",
-  "up": [0, 0, 1],
-  "forward": [1, 0, 0],
-  "nodes": [
-    {
-      "link": "base_link",
-      "mesh_url": "/api/packages/diff_drive_2w/mesh/diff_drive_2w_chassis.obj",
-      "xyz": [0, 0, 0],
-      "rpy": [0, 0, 0],
-      "scale": [1, 1, 1],
-      "role": "chassis",
-      "bounds": { "size": [0.42, 0.3, 0.1], "center": [0, 0, 0] }
-    }
-  ]
-}
+```powershell
+lappa package list
+lappa package bundle -p diff_drive_2w -p omni_3w --distro humble
+lappa package bundles
 ```
+
+Artifacts under the server workspace (e.g. `.workspaces/bundles/`) include package sources, meshes, URDF, and `lappa_manifest.json`.
 
 ---
 
@@ -318,55 +268,29 @@ lappa ros2 get
 | `kilted` | `ros:kilted-ros-base` | Interim |
 | `rolling` | `ros:rolling-ros-base` | Bleeding edge |
 
-In the IDE: **title bar → ROS2 dropdown**. Starting Docker regenerates `packages/docker/Dockerfile` for the selected distro.
+In **Qt → ROS2 / Docker**, pick the distro. Starting Docker regenerates `packages/docker/Dockerfile` for the selection.
 
 ---
 
-## Package bundles
+## HTTP API (optional)
 
-```powershell
-lappa package list
-lappa package bundle -p diff_drive_2w -p omni_3w --distro humble
-lappa package bundles
-```
-
-Or IDE → **Package** → select packages → **Create bundle zip**.
-
-Artifacts live under the server workspace (e.g. `.workspaces/bundles/`).
-
-```text
-src/<pkg>/...          # package sources including meshes/ + urdf/
-lappa_manifest.json    # distro, packages, Lappa version
-README_BUNDLE.md
-```
-
----
-
-## HTTP API
-
-Base URL when serving: `http://127.0.0.1:8840`
+Base URL when you intentionally run `lappa serve`: `http://127.0.0.1:8840`
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/health` | Health + version + demos |
 | `GET` | `/api/demos` | Demo package list |
-| `POST` | `/api/workspace/open` | Open demo / path |
-| `GET` | `/api/files?path=` | Read package file |
-| `PUT` | `/api/files` | Write file (hot-reload) |
 | `POST` | `/api/sim/start` | Start native sim |
 | `POST` | `/api/sim/cmd` | Publish twist |
 | `GET` | `/api/sim/state` | Pose / joints / lidar |
 | `GET` | `/api/sim/trajectory.csv` | Trajectory export |
 | `GET` | `/api/ros2/versions` | Distro list + selected |
 | `POST` | `/api/packages/bundle` | Create zip bundle |
-| `GET` | `/api/models/presets` | Mesh presets |
-| `POST` | `/api/models` | Create procedural mesh |
-| `POST` | `/api/models/fit` | Auto-fit library mesh |
-| `POST` | `/api/models/attach` | Fit-attach to package |
 | `POST` | `/api/models/build-robot` | Full aligned robot |
 | `GET` | `/api/packages/{pkg}/scene3d` | 3D scene graph |
-| `GET` | `/api/packages/{pkg}/mesh/{file}` | Raw OBJ for WebGL |
 | `GET` | `/api/docker/status` | Docker probe |
+
+Prefer **CLI + Qt** for interactive work; API is for automation and tests.
 
 ---
 
@@ -375,9 +299,7 @@ Base URL when serving: `http://127.0.0.1:8840`
 Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or a Docker engine on Linux).
 
 ```powershell
-# From repository root
 docker compose -f packages/docker/docker-compose.yml up --build
-# or IDE → Docker → Start runtime
 ```
 
 Without Docker, the **native kinematics sim** still runs fully offline. Docker is for real `ros2 launch` / distro fidelity.
@@ -386,7 +308,7 @@ Without Docker, the **native kinematics sim** still runs fully offline. Docker i
 
 ## Download binaries
 
-GitHub Releases ship standalone builds (no Python install):
+GitHub Releases may ship standalone builds:
 
 | File | Platform |
 | --- | --- |
@@ -394,30 +316,22 @@ GitHub Releases ship standalone builds (no Python install):
 | `lappa-linux-x64` | Linux x64 |
 
 ```powershell
-.\lappa-windows-x64.exe          # opens http://127.0.0.1:8840
 .\lappa-windows-x64.exe demo
+.\lappa-windows-x64.exe gui
 ```
 
-```bash
-chmod +x lappa-linux-x64
-./lappa-linux-x64
-./lappa-linux-x64 ros2 list
-```
-
-**Local release build:** see [docs/RELEASE.md](docs/RELEASE.md).
+**Local release build:** [docs/RELEASE.md](docs/RELEASE.md).
 
 ```powershell
 pwsh scripts\build_release.ps1
 # → dist\release\lappa-windows-x64.exe
 ```
 
-Tag `v*` on GitHub → Actions builds both OS assets.
-
 ---
 
 ## Diagrams
 
-System architecture and workflow — full width. Open the HTML files for **dark/light theme** and export (PNG/SVG).
+Full-width architecture / workflow. Open HTML for **dark/light** theme.
 
 ### Architecture
 
@@ -437,47 +351,28 @@ System architecture and workflow — full width. Open the HTML files for **dark/
 
 *Generated with [archify](https://github.com/tt-a1i).*
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│  Browser IDE  (packages/ide)  ·  Qt GUI (lappa-gui)         │
-│  Monaco · Explorer · Teleop · 2D canvas · Three.js 3D       │
-└───────────────────────────┬─────────────────────────────────┘
-                            │ HTTP /api/*  or  in-process
-┌───────────────────────────▼─────────────────────────────────┐
-│  Lappa Server  (packages/server)                            │
-│  · workspace / files / hot-reload                           │
-│  · native kinematics engines                                │
-│  · models3d: fit · attach · build-robot · scene3d           │
-│  · packager + ros2 version store                            │
-│  · docker_bridge                                            │
-└───────────┬─────────────────────────────┬───────────────────┘
-            │                             │
-   packages/demos/*              packages/docker (optional)
-   (URDF + meshes + launch)      ros:humble|jazzy|…
-```
-
 ---
 
 ## Repository layout
 
 ```text
-Lappa/
-├── packages/
-│   ├── server/          # Python CLI + FastAPI (lappa) + gui/
-│   │   ├── src/lappa/   # api, models3d, sim, packager, docker_bridge, gui
-│   │   └── tests/
-│   ├── ide/             # Static IDE (index.html, ide.js, ide.css)
-│   ├── demos/           # ROS2-style robot packages + meshes/URDF
-│   └── docker/          # Dockerfile, compose, entrypoint
-├── docs/
-│   ├── screenshots/     # README gallery
-│   ├── diagrams/        # Architecture + workflow
-│   ├── BOUNTY.md
-│   ├── RELEASE.md
-│   └── ROADMAP.md
-├── scripts/             # release builds, bounties, screenshots
-└── README.md
+packages/
+  server/                 # Primary Python package
+    src/lappa/
+      gui/                # PySide6 desktop (lappa-gui)  ← product UI
+      sim/                # Native kinematics engines
+      cli.py api.py models3d.py packager.py ...
+    tests/
+  demos/                  # diff_drive_2w, omni_3w, …
+  docker/                 # Optional ROS2 show mode
+  ide/                    # Legacy browser assets (optional / secondary)
+docs/
+  screenshots/            # gui-*.png preferred for product shots
+  diagrams/
+scripts/                  # release builds
 ```
+
+**Primary path:** `packages/server` → `pip install -e ".[gui,dev]"` → `lappa-gui`.
 
 ---
 
@@ -485,67 +380,38 @@ Lappa/
 
 ```powershell
 cd packages\server
-pip install -e ".[dev,api,gui]"
-pytest -q
+pip install -e ".[dev,gui]"
 ruff check src tests
+pytest -q
 lappa demo
+lappa-gui
 ```
-
-| Area | Path |
-| --- | --- |
-| 3D fit / URDF / scene | `src/lappa/models3d.py` |
-| Kinematics engines | `src/lappa/sim/engines.py` |
-| HTTP API | `src/lappa/api.py` |
-| Qt desktop GUI | `src/lappa/gui/` |
-| IDE client | `packages/ide/assets/ide.js` |
-| Demo packages | `packages/demos/*` |
-
----
-
-## Roadmap
-
-| Version | Status | Focus |
-| --- | --- | --- |
-| **v0.1** | Shipped | IDE shell, native sim, demos, Docker scaffold |
-| **v0.2** | Shipped | Multi-distro ROS2, packager, procedural meshes, trajectory CSV |
-| **v0.3** | Shipped | Mesh auto-fit, multi-link robots, scene3d, WebGL viewer |
-| **v0.4** | Shipped | Qt desktop GUI, sim polish, full 3D fit path |
-| Later | — | Live Docker `ros2 launch`, topic graph, Gazebo/Ignition, Foxglove |
-
-Details: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ---
 
 ## MergeOS bounties
 
-Contribute sim features, IDE UX, 3D tooling, or docs — earn **MRG** after merge.
-
-1. Star this repo and [mergeos](https://github.com/mergeos-bounties/mergeos)
-2. Claim a `bounty` issue on Lappa
-3. Claim on MergeOS [Claim Token #1](https://github.com/mergeos-bounties/mergeos/issues/1)
-4. Open a PR to **`master`** with tests / evidence
-5. Maintainer merges → ledger credit **25 / 50 / 100 / 200 MRG**
-
-Policy: [docs/BOUNTY.md](docs/BOUNTY.md).
+Star → claim a bounty issue → PR to **master** → MRG **25–200**.  
+Evidence for UI bounties: **Qt desktop screenshots** (`lappa-gui`), not the legacy browser shell.  
+See [mergeos](https://github.com/mergeos-bounties/mergeos) and [docs/BOUNTY.md](docs/BOUNTY.md).
 
 ---
 
-## Tiếng Việt (tóm tắt)
+## Tiếng Việt
 
-**Lappa** là IDE gói ROS2: sửa code, hot-reload, **mô phỏng offline** (không cần cài ROS2 trên máy), **khớp mesh 3D**, **build robot nhiều link**, xem **WebGL 3D**, đóng gói zip theo distro, Docker tùy chọn, GUI Qt (`lappa-gui`).
+**Lappa** là IDE gói ROS2: **ứng dụng desktop Qt (PySide6)** là giao diện chính (`lappa-gui`), mô phỏng offline, build robot 3D, đóng gói colcon, Docker ROS2 tùy chọn — **không cần cài ROS2 full trên máy**.
 
 ```powershell
-pip install -e "packages/server.[dev,api,gui]"
+cd packages\server
+pip install -e ".[gui,dev]"
 lappa demo
-lappa model build-robot diff_drive_2w
-lappa serve --port 8840
 lappa-gui
 ```
 
-IDE: http://127.0.0.1:8840 → Models → **Build full 3D robot** → Sim → **3D**.
+Web/browser IDE cũ chỉ còn tùy chọn; làm product và bounty UI trên **Qt**.
 
 ---
 
 ## License
 
-[MIT](LICENSE) · © MergeOS / ThanhTrucSolutions
+[MIT](LICENSE)
