@@ -61,6 +61,9 @@ DEFAULT_OBSTACLES: list[tuple[float, float, float, float]] = [
     (-1.5, 1.2, 0.4, 0.25),
     (0.8, -1.8, 0.3, 0.5),
     (1.2, 1.5, 0.25, 0.25),
+    # Corridor wall stubs for denser lidar scenes
+    (-0.2, 2.4, 1.2, 0.15),
+    (2.6, -0.8, 0.15, 0.9),
 ]
 
 
