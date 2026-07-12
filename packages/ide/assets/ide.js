@@ -8,6 +8,8 @@ let hotOn = true;
 let simRunning = false;
 let trail = [];
 let keys = {};
+let selectedMeshId = null;
+let ros2Versions = [];
 
 function log(msg) {
   const el = document.getElementById("console");
@@ -316,6 +318,71 @@ async function tickLoop() {
   requestAnimationFrame(() => setTimeout(tickLoop, 50));
 }
 
+async function loadRos2Versions() {
+  const data = await api("/api/ros2/versions");
+  ros2Versions = data.versions || [];
+  const sel = document.getElementById("ros2-version");
+  sel.innerHTML = "";
+  const current = data.selected?.id || "humble";
+  ros2Versions.forEach((v) => {
+    const o = document.createElement("option");
+    o.value = v.id;
+    o.textContent = `${v.id} — ${v.name} (${v.status})`;
+    if (v.id === current) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
+async function refreshBundleUi() {
+  const pkgs = await api("/api/packages");
+  const list = document.getElementById("bundle-pkg-list");
+  list.innerHTML = "";
+  pkgs.forEach((p) => {
+    const lab = document.createElement("label");
+    lab.innerHTML = `<input type="checkbox" value="${p.name}" checked /> <span><b>${p.name}</b><br/><span class="muted">${p.files} files</span></span>`;
+    list.appendChild(lab);
+  });
+  const bundles = await api("/api/packages/bundles");
+  const bl = document.getElementById("bundle-list");
+  bl.innerHTML = "";
+  bundles.slice(0, 12).forEach((b) => {
+    const d = document.createElement("div");
+    d.className = "item";
+    d.textContent = `${b.filename} (${Math.round(b.size_bytes / 1024)} KB)`;
+    d.title = "Download " + b.filename;
+    d.onclick = () => {
+      window.open("/api/packages/bundles/" + encodeURIComponent(b.filename), "_blank");
+    };
+    bl.appendChild(d);
+  });
+}
+
+async function refreshMeshUi() {
+  const presets = await api("/api/models/presets");
+  const ps = document.getElementById("mesh-preset");
+  if (!ps.options.length) {
+    presets.forEach((p) => {
+      const o = document.createElement("option");
+      o.value = p.id;
+      o.textContent = `${p.id} — ${p.description}`;
+      ps.appendChild(o);
+    });
+  }
+  const models = await api("/api/models");
+  const ml = document.getElementById("mesh-list");
+  ml.innerHTML = "";
+  models.forEach((m) => {
+    const d = document.createElement("div");
+    d.className = "item" + (selectedMeshId === m.id ? " on" : "");
+    d.textContent = m.id + (m.meta?.preset ? ` (${m.meta.preset})` : "");
+    d.onclick = () => {
+      selectedMeshId = m.id;
+      refreshMeshUi();
+    };
+    ml.appendChild(d);
+  });
+}
+
 function wireUi() {
   document.querySelectorAll(".act").forEach((btn) => {
     btn.onclick = () => {
@@ -323,8 +390,86 @@ function wireUi() {
       btn.classList.add("on");
       document.querySelectorAll(".panel").forEach((p) => p.classList.remove("on"));
       document.getElementById("panel-" + btn.dataset.panel).classList.add("on");
+      if (btn.dataset.panel === "package") refreshBundleUi().catch((e) => log(e.message));
+      if (btn.dataset.panel === "models") refreshMeshUi().catch((e) => log(e.message));
     };
   });
+
+  document.getElementById("ros2-version").onchange = async (e) => {
+    const distro = e.target.value;
+    try {
+      const r = await api("/api/ros2/version", {
+        method: "POST",
+        body: JSON.stringify({ distro }),
+      });
+      log("ROS2 target → " + r.selected.id + " (" + r.selected.docker_image + ")");
+    } catch (err) {
+      log("ros2 version error: " + err.message);
+    }
+  };
+
+  document.getElementById("btn-bundle").onclick = async () => {
+    const boxes = [...document.querySelectorAll("#bundle-pkg-list input:checked")];
+    const packages = boxes.map((b) => b.value);
+    const distro = document.getElementById("ros2-version").value;
+    log("bundling " + packages.join(", ") + " for " + distro + "…");
+    try {
+      const r = await api("/api/packages/bundle", {
+        method: "POST",
+        body: JSON.stringify({ packages, distro }),
+      });
+      log("bundle ok: " + r.filename + " (" + r.size_bytes + " bytes)");
+      await refreshBundleUi();
+    } catch (e) {
+      log("bundle error: " + e.message);
+    }
+  };
+
+  document.getElementById("btn-mesh-create").onclick = async () => {
+    const preset = document.getElementById("mesh-preset").value;
+    const name = document.getElementById("mesh-name").value || null;
+    try {
+      const r = await api("/api/models", {
+        method: "POST",
+        body: JSON.stringify({ preset, name }),
+      });
+      selectedMeshId = r.id;
+      log("mesh created: " + r.id + " (" + r.bytes + " bytes OBJ)");
+      await refreshMeshUi();
+    } catch (e) {
+      log("mesh error: " + e.message);
+    }
+  };
+
+  document.getElementById("btn-mesh-attach").onclick = async () => {
+    if (!selectedMeshId) {
+      log("select a mesh in library first");
+      return;
+    }
+    const packageName = activePkg?.name;
+    if (!packageName) {
+      log("open a demo package first");
+      return;
+    }
+    try {
+      const r = await api("/api/models/attach", {
+        method: "POST",
+        body: JSON.stringify({ package: packageName, model_id: selectedMeshId }),
+      });
+      log("attached " + selectedMeshId + " → " + packageName + " urdf");
+      // refresh file tree
+      activePkg = await api("/api/workspace");
+      renderTree(activePkg.files);
+      if (r.urdf) {
+        const rel = "urdf/robot.urdf";
+        try {
+          await openPath(rel);
+        } catch (_) {}
+      }
+    } catch (e) {
+      log("attach error: " + e.message);
+    }
+  };
 
   document.getElementById("btn-run").onclick = async () => {
     const demo = activePkg?.name || demos[0]?.name || "diff_drive_2w";
@@ -390,15 +535,17 @@ function wireUi() {
 async function boot() {
   wireUi();
   await setupMonaco();
+  await loadRos2Versions();
   demos = await api("/api/demos");
   renderDemos();
   log("Lappa IDE ready — " + demos.length + " demos");
   log("Ctrl+S saves file and triggers hot-reload");
+  log("Pick ROS2 version in title bar · Package panel bundles · Models panel for OBJ");
   if (demos[0]) await loadDemo(demos[0].name);
   tickLoop();
   try {
     const d = await api("/api/docker/status");
-    log("docker available=" + d.available + " daemon=" + d.daemon);
+    log("docker available=" + d.available + " daemon=" + d.daemon + " ros2=" + (d.ros2_distro || "?"));
   } catch (_) {}
 }
 

@@ -18,6 +18,10 @@
         <span class="tag">ROS2 IDE</span>
       </div>
       <div class="toolbar">
+        <label class="ros2-select-wrap" title="Target ROS2 distro for Docker + packages">
+          <span class="ros2-label">ROS2</span>
+          <select id="ros2-version" class="ros2-select"></select>
+        </label>
         <button id="btn-run" class="btn primary" title="Start native sim">▶ Run Sim</button>
         <button id="btn-stop" class="btn" title="Stop sim">■ Stop</button>
         <button id="btn-hot" class="btn toggle on" title="Toggle hot reload">⚡ Hot Reload</button>
@@ -26,7 +30,7 @@
       </div>
       <div class="title-right">
         <span id="pkg-label" class="muted">no package</span>
-        <span class="ver">v0.1</span>
+        <span class="ver">v0.2</span>
       </div>
     </header>
 
@@ -36,6 +40,8 @@
         <button class="act on" data-panel="explorer" title="Explorer">📁</button>
         <button class="act" data-panel="demos" title="Demos">🤖</button>
         <button class="act" data-panel="sim" title="Sim controls">🎛</button>
+        <button class="act" data-panel="package" title="Package / bundle">📦</button>
+        <button class="act" data-panel="models" title="3D models">🧊</button>
         <button class="act" data-panel="docker" title="Docker">🐳</button>
       </nav>
 
@@ -58,6 +64,26 @@
             <button id="btn-zero" class="btn block">Zero twist</button>
             <p class="hint">WASD / QE also work when canvas focused</p>
           </div>
+        </section>
+        <section class="panel" id="panel-package">
+          <div class="panel-title">ROS2 package bundle</div>
+          <p class="hint">Đóng gói demo packages thành zip theo distro đã chọn (colcon-ready).</p>
+          <div id="bundle-pkg-list" class="check-list"></div>
+          <button id="btn-bundle" class="btn block primary">Create bundle zip</button>
+          <div class="panel-title" style="margin-top:12px">Recent bundles</div>
+          <div id="bundle-list" class="tree"></div>
+        </section>
+        <section class="panel" id="panel-models">
+          <div class="panel-title">3D model creator</div>
+          <label class="field">Preset
+            <select id="mesh-preset" class="ros2-select block-select"></select>
+          </label>
+          <label class="field">Name <input id="mesh-name" type="text" placeholder="my_chassis" /></label>
+          <button id="btn-mesh-create" class="btn block primary">Generate OBJ</button>
+          <button id="btn-mesh-attach" class="btn block">Attach to active package</button>
+          <div class="panel-title" style="margin-top:12px">Library</div>
+          <div id="mesh-list" class="tree"></div>
+          <p class="hint">Mesh → package meshes/ + URDF visual. Export with Package bundle.</p>
         </section>
         <section class="panel" id="panel-docker">
           <div class="panel-title">Docker show mode</div>

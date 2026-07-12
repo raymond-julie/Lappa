@@ -1,7 +1,9 @@
+# Image tag follows selected ROS2 distro (Dockerfile rewritten by Lappa).
+# Default: humble. Switch via IDE title bar or `lappa ros2 set jazzy`.
 services:
   lappa-ros2:
     build: .
-    image: lappa-ros2:humble
+    image: ${LAPPA_ROS2_IMAGE:-lappa-ros2:humble}
     container_name: lappa-ros2
     volumes:
       - ../demos:/ws/src:rw

@@ -36,3 +36,39 @@ def test_docker_status_endpoint():
     r = client.get("/api/docker/status")
     assert r.status_code == 200
     assert "available" in r.json()
+
+
+def test_ros2_versions_api():
+    r = client.get("/api/ros2/versions")
+    assert r.status_code == 200
+    body = r.json()
+    assert any(v["id"] == "humble" for v in body["versions"])
+    r = client.post("/api/ros2/version", json={"distro": "jazzy"})
+    assert r.status_code == 200
+    assert r.json()["selected"]["id"] == "jazzy"
+    client.post("/api/ros2/version", json={"distro": "humble"})
+
+
+def test_bundle_and_models_api():
+    r = client.post(
+        "/api/packages/bundle",
+        json={"packages": ["diff_drive_2w"], "distro": "humble", "out_name": "api_test_bundle"},
+    )
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    r = client.get("/api/packages/bundles")
+    assert r.status_code == 200
+    assert len(r.json()) >= 1
+
+    r = client.get("/api/models/presets")
+    assert r.status_code == 200
+    assert len(r.json()) >= 5
+    r = client.post("/api/models", json={"preset": "chassis", "name": "api_chassis"})
+    assert r.status_code == 200
+    mid = r.json()["id"]
+    r = client.post(
+        "/api/models/attach",
+        json={"package": "omni_3w", "model_id": mid},
+    )
+    assert r.status_code == 200
+    assert r.json()["ok"] is True

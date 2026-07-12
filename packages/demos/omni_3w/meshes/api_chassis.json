@@ -1,0 +1,10 @@
+{
+  "kind": "box",
+  "size": [
+    0.4,
+    0.3,
+    0.15
+  ],
+  "vertices": 8,
+  "preset": "chassis"
+}

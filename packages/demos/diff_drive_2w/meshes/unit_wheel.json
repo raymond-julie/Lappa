@@ -1,0 +1,8 @@
+{
+  "kind": "cylinder",
+  "radius": 0.06,
+  "height": 0.03,
+  "axis": "y",
+  "vertices": 50,
+  "preset": "wheel"
+}

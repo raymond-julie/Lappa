@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from lappa import __version__, docker_bridge
+from lappa import __version__, docker_bridge, models3d, packager, ros2_versions
 from lappa.config import DEMOS_ROOT, IDE_ROOT, ensure_dirs
 from lappa.package_loader import list_demo_packages, load_package, read_file, write_file
 from lappa.sim.session import SESSION
@@ -61,6 +61,38 @@ class HotReloadBody(BaseModel):
     enabled: bool = True
 
 
+class Ros2VersionBody(BaseModel):
+    distro: str
+
+
+class BundleBody(BaseModel):
+    packages: list[str] | None = None
+    distro: str | None = None
+    out_name: str | None = None
+
+
+class ModelCreateBody(BaseModel):
+    preset: str = "box"
+    name: str | None = None
+    sx: float = 0.4
+    sy: float = 0.3
+    sz: float = 0.15
+    radius: float = 0.08
+    height: float = 0.05
+    length: float = 0.5
+    thickness: float = 0.06
+    segments: int = 24
+
+
+class ModelAttachBody(BaseModel):
+    package: str
+    model_id: str
+    link_name: str = "base_link"
+    xyz: str = "0 0 0.05"
+    rpy: str = "0 0 0"
+    scale: str = "1 1 1"
+
+
 @app.get("/health")
 def health() -> dict[str, Any]:
     return {
@@ -69,6 +101,7 @@ def health() -> dict[str, Any]:
         "version": __version__,
         "demos": [p.name for p in list_demo_packages(DEMOS_ROOT)],
         "docker": docker_bridge.status().get("available"),
+        "ros2": ros2_versions.get_selected(),
     }
 
 
@@ -173,6 +206,109 @@ def api_docker_start() -> dict:
 @app.post("/api/docker/stop")
 def api_docker_stop() -> dict:
     return docker_bridge.stop_runtime()
+
+
+# --- ROS2 version ---
+@app.get("/api/ros2/versions")
+def api_ros2_versions() -> dict:
+    return {"versions": ros2_versions.list_versions(), "selected": ros2_versions.get_selected()}
+
+
+@app.get("/api/ros2/version")
+def api_ros2_version_get() -> dict:
+    return ros2_versions.get_selected()
+
+
+@app.post("/api/ros2/version")
+def api_ros2_version_set(body: Ros2VersionBody) -> dict:
+    try:
+        selected = ros2_versions.set_selected(body.distro)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    docker_bridge.apply_ros2_dockerfile(body.distro)
+    return {"ok": True, "selected": selected}
+
+
+# --- Package bundling ---
+@app.get("/api/packages")
+def api_packages() -> list[dict]:
+    return packager.list_bundleable()
+
+
+@app.post("/api/packages/bundle")
+def api_bundle(body: BundleBody) -> dict:
+    try:
+        return packager.package_bundle(body.packages, body.distro, body.out_name)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.get("/api/packages/bundles")
+def api_bundles() -> list[dict]:
+    return packager.list_bundles()
+
+
+@app.get("/api/packages/bundles/{filename}")
+def api_download_bundle(filename: str) -> FileResponse:
+    # prevent path traversal
+    safe = Path(filename).name
+    path = packager._bundle_root() / safe
+    if not path.is_file() or path.suffix != ".zip":
+        raise HTTPException(404, "bundle not found")
+    return FileResponse(path, filename=safe, media_type="application/zip")
+
+
+# --- 3D models ---
+@app.get("/api/models/presets")
+def api_model_presets() -> list[dict]:
+    return models3d.list_presets()
+
+
+@app.get("/api/models")
+def api_models() -> list[dict]:
+    return models3d.list_library()
+
+
+@app.post("/api/models")
+def api_model_create(body: ModelCreateBody) -> dict:
+    try:
+        return models3d.create_model(
+            body.preset,
+            name=body.name,
+            sx=body.sx,
+            sy=body.sy,
+            sz=body.sz,
+            radius=body.radius,
+            height=body.height,
+            length=body.length,
+            thickness=body.thickness,
+            segments=body.segments,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.post("/api/models/attach")
+def api_model_attach(body: ModelAttachBody) -> dict:
+    try:
+        return models3d.attach_model_to_package(
+            body.package,
+            body.model_id,
+            link_name=body.link_name,
+            xyz=body.xyz,
+            rpy=body.rpy,
+            scale=body.scale,
+        )
+    except (ValueError, FileNotFoundError) as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.get("/api/models/attachments/{package}")
+def api_model_attachments(package: str) -> list[dict]:
+    try:
+        return models3d.package_attachments(package)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e)) from e
 
 
 # Static IDE

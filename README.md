@@ -4,10 +4,10 @@
 
 | Layer | Role |
 | --- | --- |
-| **Lappa IDE** | Professional browser IDE (editor, explorer, sim viewport, topics, console) |
-| **Lappa Server** | Workspace API, package loader, sim engine, Docker bridge, hot-reload |
+| **Lappa IDE** | Professional browser IDE (editor, explorer, sim, package, 3D models) |
+| **Lappa Server** | Workspace API, multi-distro ROS2, packager, 3D mesh gen, sim, Docker |
 | **Demos** | Ready ROS2-style packages: 2-wheel, 3-wheel omni, ackermann, arm base |
-| **Docker runtime** | Optional ROS2 Humble container for “real” `ros2` runs + show mode |
+| **Docker runtime** | Optional ROS2 container (**Humble / Iron / Jazzy / Kilted / Rolling**) |
 
 Org: [mergeos-bounties](https://github.com/mergeos-bounties) · MergeOS MRG bounties · Project `prj_0352`.
 
@@ -53,9 +53,61 @@ python scripts/capture_screenshots.py
 ## Why Lappa
 
 - **No host ROS2 required** for demos — built-in kinematics sim streams pose / twist / laser to the IDE.
+- **ROS2 version picker** — target Humble, Iron, Jazzy, Kilted, or Rolling; Dockerfiles rewrite for the distro.
+- **Package bundler** — zip one or many ROS2 packages with `lappa_manifest.json` for colcon install.
+- **3D model lab** — procedural OBJ meshes (chassis, wheel, arm link, lidar dome…) attach into `meshes/` + URDF.
 - **Docker show mode** when Docker Desktop is available — mount the package, run nodes, hot-reload sources.
 - **Hot reload** watches package files and restarts or patches the active sim session.
 - **Professional IDE chrome** — activity bar, split panes, Monaco editor, dark theme, robot canvas.
+
+## ROS2 versions
+
+```powershell
+lappa ros2 list
+lappa ros2 set jazzy
+lappa ros2 get
+```
+
+| Id | Image | Notes |
+| --- | --- | --- |
+| `humble` | `ros:humble-ros-base` | Default LTS (Ubuntu 22.04) |
+| `iron` | `ros:iron-ros-base` | Legacy |
+| `jazzy` | `ros:jazzy-ros-base` | LTS Ubuntu 24.04 |
+| `kilted` | `ros:kilted-ros-base` | Interim |
+| `rolling` | `ros:rolling-ros-base` | Bleeding edge |
+
+In the IDE: **title bar → ROS2 dropdown**. Docker start regenerates `packages/docker/Dockerfile` for that distro.
+
+## Package bundles
+
+```powershell
+lappa package list
+lappa package bundle -p diff_drive_2w -p omni_3w --distro humble
+lappa package bundles
+```
+
+Or IDE → **📦 Package** → select packages → **Create bundle zip**. Downloads under `.workspaces/bundles/`.
+
+Zip layout:
+
+```text
+src/<pkg>/...
+lappa_manifest.json
+README_BUNDLE.md
+```
+
+## 3D models
+
+```powershell
+lappa model presets
+lappa model create chassis --name my_base
+lappa model attach diff_drive_2w my_base
+lappa model list
+```
+
+Presets: `box`, `cylinder`, `sphere`, `wheel`, `chassis`, `arm_link`, `lidar_dome`.
+
+IDE → **🧊 Models** → generate OBJ → **Attach to active package** (writes `meshes/*.obj` + patches `urdf/robot.urdf`). Include meshes when you **bundle** the package.
 
 ## Quick start (Windows, offline)
 
