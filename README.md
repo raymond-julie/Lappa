@@ -9,7 +9,46 @@
 | **Demos** | Ready ROS2-style packages: 2-wheel, 3-wheel omni, ackermann, arm base |
 | **Docker runtime** | Optional ROS2 Humble container for “real” `ros2` runs + show mode |
 
-Org: [mergeos-bounties](https://github.com/mergeos-bounties) · MergeOS MRG bounties.
+Org: [mergeos-bounties](https://github.com/mergeos-bounties) · MergeOS MRG bounties · Project `prj_0352`.
+
+## Screenshots
+
+Live capture from `lappa serve` (native sim, no host ROS2):
+
+### IDE overview — robot demos
+
+![Lappa IDE overview with demo list](docs/screenshots/ide-overview.png)
+
+### Differential drive (2-wheel)
+
+![Diff drive 2w sim with trail](docs/screenshots/sim-diff-drive.png)
+
+### Omnidirectional 3-wheel
+
+![Omni 3w holonomic sim](docs/screenshots/sim-omni-3w.png)
+
+### Planar arm (2-DOF)
+
+![Simple arm kinematics](docs/screenshots/sim-arm.png)
+
+### Docker show mode panel
+
+![Docker show mode status](docs/screenshots/docker-panel.png)
+
+### Tricycle 3-wheel
+
+![Tricycle steered base](docs/screenshots/sim-tricycle.png)
+
+Re-capture locally:
+
+```powershell
+# terminal 1
+cd packages/server
+lappa serve --port 8840
+
+# terminal 2
+python scripts/capture_screenshots.py
+```
 
 ## Why Lappa
 
@@ -24,7 +63,7 @@ Org: [mergeos-bounties](https://github.com/mergeos-bounties) · MergeOS MRG boun
 cd D:\ThanhTrucSolutions\Lappa\packages\server
 python -m venv .venv
 .\.venv\Scripts\activate
-pip install -e ".[dev]"
+pip install -e ".[dev,api]"
 
 lappa demo
 lappa serve --port 8840
@@ -39,6 +78,19 @@ lappa workspace open demos/diff_drive_2w
 lappa sim start --demo diff_drive_2w
 lappa sim status
 lappa docker status
+```
+
+### CLI demo output (offline)
+
+```text
+demos: 5  (ackermann_4w, diff_drive_2w, omni_3w, simple_arm, tricycle_3w)
+  ackermann_4w: x=0.1  theta≈0.04
+  diff_drive_2w: x=0.1  theta≈0.05
+  omni_3w: strafe y>0
+  simple_arm: FK tip updates
+  tricycle_3w: steered arc
+docker available=true  daemon=false  (native sim still runs)
+Lappa demo complete (offline native sim).
 ```
 
 ## Docker sim (optional)
@@ -73,7 +125,9 @@ packages/
   ide/        # Static professional IDE (served by server)
   demos/      # Sample ROS2 packages
   docker/     # ROS2 Humble runtime image + compose
+docs/screenshots/
 docs/BOUNTY.md
+scripts/capture_screenshots.py
 ```
 
 ## MergeOS bounties
