@@ -1,42 +1,50 @@
 [
   {
-    "model_id": "api_chassis",
+    "model_id": "omni_3w_chassis",
     "link": "base_link",
-    "mesh": "meshes/api_chassis.obj",
-    "xyz": "0 0 0.05",
+    "mesh": "meshes/omni_3w_chassis.obj",
+    "xyz": "0 0 0",
     "rpy": "0 0 0",
-    "scale": "1 1 1"
+    "scale": "1 1 1",
+    "role": "chassis"
   },
   {
-    "model_id": "api_chassis",
-    "link": "base_link_mesh",
-    "mesh": "meshes/api_chassis.obj",
-    "xyz": "0 0 0.05",
-    "rpy": "0 0 0",
-    "scale": "1 1 1"
+    "model_id": "omni_3w_wheel_0",
+    "link": "wheel_0",
+    "mesh": "meshes/omni_3w_wheel_0.obj",
+    "xyz": "0.12000 0.00000 -0.03000",
+    "rpy": "0 0 0.00000",
+    "scale": "1 1 1",
+    "role": "wheel",
+    "radius": 0.04
   },
   {
-    "model_id": "api_chassis",
-    "link": "base_link_mesh",
-    "mesh": "meshes/api_chassis.obj",
-    "xyz": "0 0 0.05",
-    "rpy": "0 0 0",
-    "scale": "1 1 1"
+    "model_id": "omni_3w_wheel_1",
+    "link": "wheel_1",
+    "mesh": "meshes/omni_3w_wheel_1.obj",
+    "xyz": "-0.06000 0.10400 -0.03000",
+    "rpy": "0 0 2.09400",
+    "scale": "1 1 1",
+    "role": "wheel",
+    "radius": 0.04
   },
   {
-    "model_id": "api_chassis",
-    "link": "base_link_mesh",
-    "mesh": "meshes/api_chassis.obj",
-    "xyz": "0 0 0.05",
-    "rpy": "0 0 0",
-    "scale": "1 1 1"
+    "model_id": "omni_3w_wheel_2",
+    "link": "wheel_2",
+    "mesh": "meshes/omni_3w_wheel_2.obj",
+    "xyz": "-0.06000 -0.10400 -0.03000",
+    "rpy": "0 0 -2.09400",
+    "scale": "1 1 1",
+    "role": "wheel",
+    "radius": 0.04
   },
   {
-    "model_id": "api_chassis",
-    "link": "base_link_mesh",
-    "mesh": "meshes/api_chassis.obj",
-    "xyz": "0 0 0.05",
+    "model_id": "omni_3w_lidar",
+    "link": "lidar_link",
+    "mesh": "meshes/omni_3w_lidar.obj",
+    "xyz": "0.00000 0.00000 0.07000",
     "rpy": "0 0 0",
-    "scale": "1 1 1"
+    "scale": "1 1 1",
+    "role": "lidar"
   }
 ]

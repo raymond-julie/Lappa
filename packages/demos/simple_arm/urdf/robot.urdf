@@ -1,7 +1,77 @@
-﻿<?xml version="1.0"?>
+<?xml version="1.0"?>
+<!-- Lappa aligned 3D robot — package simple_arm -->
 <robot name="simple_arm">
-  <link name="base_link"/>
-  <!-- Simplified URDF placeholder for Lappa canvas / future mesh load -->
-  <link name="wheel_left"/>
-  <link name="wheel_right"/>
+  <link name="base_footprint"/>
+  <joint name="base_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 0.03000" rpy="0 0 0"/>
+  </joint>
+
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://simple_arm/meshes/simple_arm_chassis.obj" scale="1 1 1"/>
+      </geometry>
+      <material name="lappa_mesh">
+        <color rgba="0.2 0.55 0.95 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://simple_arm/meshes/simple_arm_chassis.obj" scale="1 1 1"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="link1">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://simple_arm/meshes/simple_arm_link1.obj" scale="1 1 1"/>
+      </geometry>
+      <material name="lappa_mesh">
+        <color rgba="0.64 0.44 0.97 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://simple_arm/meshes/simple_arm_link1.obj" scale="1 1 1"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="link1_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="link1"/>
+    <origin xyz="0.25000 0.00000 0.05000" rpy="0 0 0"/>
+  </joint>
+
+  <link name="link2">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://simple_arm/meshes/simple_arm_link2.obj" scale="1 1 1"/>
+      </geometry>
+      <material name="lappa_mesh">
+        <color rgba="0.64 0.44 0.97 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://simple_arm/meshes/simple_arm_link2.obj" scale="1 1 1"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="link2_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="link2"/>
+    <origin xyz="0.70000 0.00000 0.05000" rpy="0 0 0"/>
+  </joint>
+
 </robot>

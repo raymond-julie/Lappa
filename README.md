@@ -40,10 +40,38 @@ Real captures from running the product demo (Lappa).
 - **No host ROS2 required** for demos — built-in kinematics sim streams pose / twist / laser to the IDE.
 - **ROS2 version picker** — target Humble, Iron, Jazzy, Kilted, or Rolling; Dockerfiles rewrite for the distro.
 - **Package bundler** — zip one or many ROS2 packages with `lappa_manifest.json` for colcon install.
-- **3D model lab** — procedural OBJ meshes (chassis, wheel, arm link, lidar dome…) attach into `meshes/` + URDF.
+- **Full 3D stack (v0.3)** — auto-fit mesh AABB to link size, multi-link robots (chassis + wheels + lidar) with correct kinematics offsets, continuous wheel joints, WebGL viewer (Three.js) with orbit camera, and `scene3d` API for the IDE.
+- **3D model lab** — procedural OBJ meshes (chassis, wheel, arm link, lidar dome…) fit-attach into `meshes/` + clean URDF (no duplicate links).
 - **Docker show mode** when Docker Desktop is available — mount the package, run nodes, hot-reload sources.
 - **Hot reload** watches package files and restarts or patches the active sim session.
-- **Professional IDE chrome** — activity bar, split panes, Monaco editor, dark theme, robot canvas.
+- **Professional IDE chrome** — activity bar, split panes, Monaco editor, dark theme, 2D/3D sim toggle.
+
+## 3D models (fit + full robot)
+
+```powershell
+# Procedural mesh → library
+lappa model create chassis -n my_chassis
+lappa model create wheel -n my_wheel
+
+# Auto-fit AABB to target box (khớp kích thước 3D)
+lappa model fit my_chassis --sx 0.42 --sy 0.30 --sz 0.10
+
+# Attach with auto-fit onto base_link (replaces visual safely)
+lappa model attach diff_drive_2w my_chassis --auto-fit
+
+# Build complete aligned robot: base_footprint → chassis + wheels + lidar
+lappa model build-robot diff_drive_2w
+lappa model build-robot omni_3w
+lappa model scene diff_drive_2w
+```
+
+IDE:
+
+1. Open a demo → **🧊 Models** → **Build full 3D robot**
+2. Sim panel → toggle **3D** (orbit: drag / wheel zoom)
+3. Teleop — wheels spin from live joint odometry
+
+API: `POST /api/models/build-robot`, `POST /api/models/fit`, `GET /api/packages/{pkg}/scene3d`, `GET /api/packages/{pkg}/mesh/{file}.obj`.
 
 ## ROS2 versions
 

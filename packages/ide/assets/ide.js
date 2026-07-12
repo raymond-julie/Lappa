@@ -10,6 +10,9 @@ let trail = [];
 let keys = {};
 let selectedMeshId = null;
 let ros2Versions = [];
+let viewMode = "2d"; // 2d | 3d
+let scene3d = null;
+let threeCtx = null; // { renderer, scene, camera, robot, nodes, drag }
 
 function log(msg) {
   const el = document.getElementById("console");
@@ -82,6 +85,9 @@ async function loadDemo(name) {
   setPill("running", "run");
   trail = [];
   log("sim started: " + name + " (native)");
+  if (viewMode === "3d") {
+    loadScene3d(name).catch((e) => log("3d scene: " + e.message));
+  }
 }
 
 async function openPath(rel) {
@@ -294,7 +300,12 @@ async function tickLoop() {
         body: JSON.stringify({ linear_x: lx, linear_y: ly, angular_z: az }),
       });
       const st = await api("/api/sim/state");
-      drawRobot(ctx, st, canvas.width, canvas.height);
+      if (viewMode === "2d") {
+        drawRobot(ctx, st, canvas.width, canvas.height);
+      } else {
+        updateRobot3d(st);
+        render3d();
+      }
       document.getElementById("t-cmd").textContent =
         `lx=${lx.toFixed(2)} ly=${ly.toFixed(2)} az=${az.toFixed(2)}`;
       document.getElementById("t-odom").textContent =
@@ -302,20 +313,254 @@ async function tickLoop() {
       document.getElementById("t-scan").textContent =
         st.lidar ? `${st.lidar.length} rays` : "—";
       document.getElementById("sim-meta").textContent =
-        (st.mode || "native") + (st.message ? " · " + st.message : "");
+        (st.mode || "native") + (viewMode === "3d" ? " · 3D" : " · 2D") +
+        (st.message ? " · " + st.message : "");
       const status = await api("/api/sim/status");
       document.getElementById("reload-badge").textContent =
         "reloads: " + (status.reload_count || 0);
-      if (status.logs && status.logs.length) {
-        // append only new-ish
-      }
     } catch (e) {
       /* ignore tick errors when stopped */
     }
-  } else {
+  } else if (viewMode === "2d") {
     drawRobot(ctx, { x: 0, y: 0, theta: 0, kind: "diff_drive_2w", lidar: [] }, canvas.width, canvas.height);
+  } else {
+    render3d();
   }
   requestAnimationFrame(() => setTimeout(tickLoop, 50));
+}
+
+/* ---------- WebGL 3D viewer (Three.js) ---------- */
+
+function ensureThree() {
+  if (typeof THREE === "undefined") {
+    throw new Error("Three.js not loaded");
+  }
+  if (threeCtx) return threeCtx;
+  const host = document.getElementById("viewport3d");
+  const w = host.clientWidth || 640;
+  const h = host.clientHeight || 400;
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  renderer.setSize(w, h, false);
+  renderer.setClearColor(0x0a0e14, 1);
+  host.innerHTML = "";
+  host.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0x0a0e14, 8, 28);
+  const camera = new THREE.PerspectiveCamera(50, w / h, 0.02, 80);
+  camera.position.set(1.4, 1.1, 1.4);
+  camera.lookAt(0, 0.1, 0);
+
+  const amb = new THREE.AmbientLight(0x8899aa, 0.55);
+  scene.add(amb);
+  const dir = new THREE.DirectionalLight(0xffffff, 0.85);
+  dir.position.set(3, 6, 2);
+  scene.add(dir);
+
+  // ground grid (XY plane with Z-up: rotate grid)
+  const grid = new THREE.GridHelper(6, 24, 0x30363d, 0x21262d);
+  grid.rotation.x = Math.PI / 2; // XZ ground with Y-up three default → we use Z-up remap below
+  // Three.js is Y-up; our robot is Z-up. We'll map robot Z→Y when placing.
+  grid.rotation.x = 0;
+  scene.add(grid);
+  const axes = new THREE.AxesHelper(0.4);
+  scene.add(axes);
+
+  const robot = new THREE.Group();
+  scene.add(robot);
+
+  const drag = { active: false, x: 0, y: 0, theta: 0.7, phi: 0.55, dist: 2.2 };
+  const canvas = renderer.domElement;
+  canvas.addEventListener("pointerdown", (e) => {
+    drag.active = true;
+    drag.x = e.clientX;
+    drag.y = e.clientY;
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener("pointerup", (e) => {
+    drag.active = false;
+    try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!drag.active) return;
+    const dx = e.clientX - drag.x;
+    const dy = e.clientY - drag.y;
+    drag.x = e.clientX;
+    drag.y = e.clientY;
+    drag.theta -= dx * 0.01;
+    drag.phi = Math.max(0.15, Math.min(1.4, drag.phi + dy * 0.01));
+  });
+  canvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    drag.dist = Math.max(0.6, Math.min(8, drag.dist + e.deltaY * 0.002));
+  }, { passive: false });
+
+  threeCtx = { renderer, scene, camera, robot, nodes: {}, drag, host };
+  window.addEventListener("resize", () => resize3d());
+  return threeCtx;
+}
+
+function resize3d() {
+  if (!threeCtx) return;
+  const { renderer, camera, host } = threeCtx;
+  const w = host.clientWidth || 640;
+  const h = host.clientHeight || 400;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h, false);
+}
+
+/** Map ROS (x forward, y left, z up) → Three (x right, y up, z toward camera) */
+function rosToThree(x, y, z) {
+  return new THREE.Vector3(x, z, -y);
+}
+
+function parseObjToGeometry(objText) {
+  const positions = [];
+  const verts = [];
+  objText.split("\n").forEach((line) => {
+    const t = line.trim();
+    if (t.startsWith("v ")) {
+      const p = t.split(/\s+/);
+      verts.push([parseFloat(p[1]), parseFloat(p[2]), parseFloat(p[3])]);
+    } else if (t.startsWith("f ")) {
+      const p = t.split(/\s+/).slice(1);
+      const idx = p.map((s) => parseInt(s.split("/")[0], 10) - 1);
+      // fan triangulate
+      for (let i = 1; i + 1 < idx.length; i++) {
+        const tri = [idx[0], idx[i], idx[i + 1]];
+        tri.forEach((vi) => {
+          const v = verts[vi];
+          if (!v) return;
+          // ROS → Three
+          positions.push(v[0], v[2], -v[1]);
+        });
+      }
+    }
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+async function loadScene3d(packageName) {
+  ensureThree();
+  const name = packageName || activePkg?.name;
+  if (!name) return;
+  scene3d = await api("/api/packages/" + encodeURIComponent(name) + "/scene3d");
+  const { robot } = threeCtx;
+  while (robot.children.length) robot.remove(robot.children[0]);
+  threeCtx.nodes = {};
+
+  if (!scene3d.nodes || !scene3d.nodes.length) {
+    document.getElementById("t-3d").textContent = "no meshes — Build full 3D robot";
+    log("3D scene empty for " + name + " — use Models → Build full 3D robot");
+    return;
+  }
+
+  for (const node of scene3d.nodes) {
+    let geo;
+    try {
+      const objText = await fetch(API + node.mesh_url).then((r) => {
+        if (!r.ok) throw new Error(r.statusText);
+        return r.text();
+      });
+      geo = parseObjToGeometry(objText);
+    } catch (e) {
+      log("mesh load fail " + node.mesh + ": " + e.message);
+      geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+    }
+    const role = node.role || "part";
+    const color =
+      role === "chassis" ? 0x3b82f6 :
+      role === "wheel" ? 0x1f2937 :
+      role === "lidar" ? 0xf59e0b :
+      role === "arm_link" ? 0xa371f7 :
+      0x58a6ff;
+    const mat = new THREE.MeshStandardMaterial({
+      color,
+      metalness: 0.25,
+      roughness: 0.55,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    const g = new THREE.Group();
+    // local offset of link relative to base_link (ROS coords → three)
+    const [ox, oy, oz] = node.xyz || [0, 0, 0];
+    const [rr, rp, ry] = node.rpy || [0, 0, 0];
+    const pos = rosToThree(ox, oy, oz);
+    g.position.copy(pos);
+    // rpy: apply yaw around Three Y (ROS Z)
+    g.rotation.order = "YXZ";
+    g.rotation.y = ry; // yaw
+    g.rotation.x = rp;
+    g.rotation.z = -rr;
+    const [sx, sy, sz] = node.scale || [1, 1, 1];
+    mesh.scale.set(sx, sz, sy);
+    g.add(mesh);
+    g.userData = { link: node.link, role };
+    robot.add(g);
+    threeCtx.nodes[node.link] = g;
+  }
+
+  document.getElementById("t-3d").textContent =
+    `${scene3d.count} links · ${name}`;
+  log("3D scene loaded: " + name + " (" + scene3d.count + " nodes)");
+  render3d();
+}
+
+function updateRobot3d(st) {
+  if (!threeCtx) return;
+  const { robot, nodes } = threeCtx;
+  // base pose on ground plane
+  const x = st.x || 0;
+  const y = st.y || 0;
+  const th = st.theta || 0;
+  robot.position.copy(rosToThree(x, y, 0));
+  robot.rotation.set(0, th, 0); // yaw about Y (up)
+
+  // wheel spin if joints present
+  const joints = st.joints || [];
+  const wheelNames = Object.keys(nodes).filter((k) => /wheel/i.test(k));
+  wheelNames.forEach((name, i) => {
+    const g = nodes[name];
+    if (!g || joints[i] === undefined) return;
+    // spin about local axis (Three X after ROS Y-axis wheel)
+    g.rotation.x = joints[i];
+  });
+}
+
+function render3d() {
+  if (!threeCtx) return;
+  const { renderer, scene, camera, drag, robot } = threeCtx;
+  // orbit camera around robot
+  const target = robot.position.clone().add(new THREE.Vector3(0, 0.12, 0));
+  const ct = Math.cos(drag.theta);
+  const st = Math.sin(drag.theta);
+  const cp = Math.cos(drag.phi);
+  const sp = Math.sin(drag.phi);
+  camera.position.set(
+    target.x + drag.dist * sp * ct,
+    target.y + drag.dist * cp,
+    target.z + drag.dist * sp * st
+  );
+  camera.lookAt(target);
+  renderer.render(scene, camera);
+}
+
+function setViewMode(mode) {
+  viewMode = mode;
+  document.getElementById("btn-view-2d").classList.toggle("on", mode === "2d");
+  document.getElementById("btn-view-3d").classList.toggle("on", mode === "3d");
+  document.getElementById("viewport").hidden = mode !== "2d";
+  document.getElementById("viewport3d").hidden = mode !== "3d";
+  if (mode === "3d") {
+    ensureThree();
+    resize3d();
+    const pkg = activePkg?.name;
+    if (pkg) loadScene3d(pkg).catch((e) => log("3d: " + e.message));
+  }
 }
 
 async function loadRos2Versions() {
@@ -454,22 +699,72 @@ function wireUi() {
     try {
       const r = await api("/api/models/attach", {
         method: "POST",
-        body: JSON.stringify({ package: packageName, model_id: selectedMeshId }),
+        body: JSON.stringify({
+          package: packageName,
+          model_id: selectedMeshId,
+          auto_fit: true,
+          replace: true,
+        }),
       });
-      log("attached " + selectedMeshId + " → " + packageName + " urdf");
-      // refresh file tree
+      log(
+        "fit-attached " +
+          selectedMeshId +
+          " → " +
+          packageName +
+          (r.fit ? " (auto-fit scale applied)" : "")
+      );
       activePkg = await api("/api/workspace");
       renderTree(activePkg.files);
       if (r.urdf) {
-        const rel = "urdf/robot.urdf";
         try {
-          await openPath(rel);
+          await openPath("urdf/robot.urdf");
         } catch (_) {}
       }
+      if (viewMode === "3d") await loadScene3d(packageName);
     } catch (e) {
       log("attach error: " + e.message);
     }
   };
+
+  document.getElementById("btn-mesh-build").onclick = async () => {
+    const packageName = activePkg?.name;
+    if (!packageName) {
+      log("open a demo package first");
+      return;
+    }
+    log("building full 3D robot for " + packageName + "…");
+    try {
+      const r = await api("/api/models/build-robot", {
+        method: "POST",
+        body: JSON.stringify({ package: packageName }),
+      });
+      log(
+        "3D robot ok: " +
+          r.links +
+          " links · models=" +
+          (r.models || []).join(",")
+      );
+      activePkg = await api("/api/workspace");
+      renderTree(activePkg.files);
+      try {
+        await openPath("urdf/robot.urdf");
+      } catch (_) {}
+      setViewMode("3d");
+      await loadScene3d(packageName);
+    } catch (e) {
+      log("build-robot error: " + e.message);
+    }
+  };
+
+  document.getElementById("btn-mesh-reload-scene").onclick = async () => {
+    const packageName = activePkg?.name;
+    if (!packageName) return;
+    setViewMode("3d");
+    await loadScene3d(packageName);
+  };
+
+  document.getElementById("btn-view-2d").onclick = () => setViewMode("2d");
+  document.getElementById("btn-view-3d").onclick = () => setViewMode("3d");
 
   document.getElementById("btn-run").onclick = async () => {
     const demo = activePkg?.name || demos[0]?.name || "diff_drive_2w";
@@ -538,9 +833,9 @@ async function boot() {
   await loadRos2Versions();
   demos = await api("/api/demos");
   renderDemos();
-  log("Lappa IDE ready — " + demos.length + " demos");
+  log("Lappa IDE ready — " + demos.length + " demos · 3D mesh fit v0.3");
   log("Ctrl+S saves file and triggers hot-reload");
-  log("Pick ROS2 version in title bar · Package panel bundles · Models panel for OBJ");
+  log("Models → Build full 3D robot · toggle 2D/3D in sim panel");
   if (demos[0]) await loadDemo(demos[0].name);
   tickLoop();
   try {

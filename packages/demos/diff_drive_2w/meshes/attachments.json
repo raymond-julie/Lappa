@@ -1,66 +1,40 @@
 [
   {
-    "model_id": "unit_wheel",
+    "model_id": "diff_drive_2w_chassis",
     "link": "base_link",
-    "mesh": "meshes/unit_wheel.obj",
-    "xyz": "0 0 0.05",
+    "mesh": "meshes/diff_drive_2w_chassis.obj",
+    "xyz": "0 0 0",
     "rpy": "0 0 0",
-    "scale": "1 1 1"
+    "scale": "1 1 1",
+    "role": "chassis"
   },
   {
-    "model_id": "demo_chassis",
-    "link": "base_link_mesh",
-    "mesh": "meshes/demo_chassis.obj",
-    "xyz": "0 0 0.05",
-    "rpy": "0 0 0",
-    "scale": "1 1 1"
+    "model_id": "diff_drive_2w_wheel_left",
+    "link": "wheel_left",
+    "mesh": "meshes/diff_drive_2w_wheel_left.obj",
+    "xyz": "0.00000 0.16000 -0.03000",
+    "rpy": "0 0 0.00000",
+    "scale": "1 1 1",
+    "role": "wheel",
+    "radius": 0.05
   },
   {
-    "model_id": "unit_wheel",
-    "link": "base_link_mesh",
-    "mesh": "meshes/unit_wheel.obj",
-    "xyz": "0 0 0.05",
-    "rpy": "0 0 0",
-    "scale": "1 1 1"
+    "model_id": "diff_drive_2w_wheel_right",
+    "link": "wheel_right",
+    "mesh": "meshes/diff_drive_2w_wheel_right.obj",
+    "xyz": "0.00000 -0.16000 -0.03000",
+    "rpy": "0 0 0.00000",
+    "scale": "1 1 1",
+    "role": "wheel",
+    "radius": 0.05
   },
   {
-    "model_id": "unit_wheel",
-    "link": "base_link_mesh",
-    "mesh": "meshes/unit_wheel.obj",
-    "xyz": "0 0 0.05",
+    "model_id": "diff_drive_2w_lidar",
+    "link": "lidar_link",
+    "mesh": "meshes/diff_drive_2w_lidar.obj",
+    "xyz": "0.05000 0.00000 0.08000",
     "rpy": "0 0 0",
-    "scale": "1 1 1"
-  },
-  {
-    "model_id": "unit_wheel",
-    "link": "base_link_mesh",
-    "mesh": "meshes/unit_wheel.obj",
-    "xyz": "0 0 0.05",
-    "rpy": "0 0 0",
-    "scale": "1 1 1"
-  },
-  {
-    "model_id": "demo_chassis",
-    "link": "base_link_mesh",
-    "mesh": "meshes/demo_chassis.obj",
-    "xyz": "0 0 0.05",
-    "rpy": "0 0 0",
-    "scale": "1 1 1"
-  },
-  {
-    "model_id": "unit_wheel",
-    "link": "base_link_mesh",
-    "mesh": "meshes/unit_wheel.obj",
-    "xyz": "0 0 0.05",
-    "rpy": "0 0 0",
-    "scale": "1 1 1"
-  },
-  {
-    "model_id": "demo_chassis",
-    "link": "base_link_mesh",
-    "mesh": "meshes/demo_chassis.obj",
-    "xyz": "0 0 0.05",
-    "rpy": "0 0 0",
-    "scale": "1 1 1"
+    "scale": "1 1 1",
+    "role": "lidar"
   }
 ]

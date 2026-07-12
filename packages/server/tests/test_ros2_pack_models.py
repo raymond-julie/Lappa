@@ -29,18 +29,74 @@ def test_package_bundle_zip():
 
 
 def test_mesh_create_and_attach():
-    mesh = models3d.create_model("wheel", name="unit_wheel", radius=0.06, height=0.03)
+    mesh = models3d.create_model("wheel", name="unit_wheel_test", radius=0.06, height=0.03)
     assert mesh["ok"]
     assert Path(mesh["obj_path"]).is_file()
     assert "v " in Path(mesh["obj_path"]).read_text(encoding="utf-8")
-    att = models3d.attach_model_to_package("diff_drive_2w", mesh["id"])
+    assert mesh["bounds"]["vertices"] > 0
+    att = models3d.attach_model_to_package(
+        "diff_drive_2w",
+        mesh["id"],
+        auto_fit=True,
+        target_size=[0.1, 0.04, 0.1],
+        replace=True,
+    )
     assert att["ok"]
     assert Path(att["mesh"]).is_file()
     urdf = Path(att["urdf"]).read_text(encoding="utf-8")
     assert "mesh" in urdf
     assert mesh["id"] in urdf
+    # no duplicate base_link_mesh spam
+    assert urdf.count('name="base_link_mesh"') == 0
     attachments = models3d.package_attachments("diff_drive_2w")
     assert any(a["model_id"] == mesh["id"] for a in attachments)
+
+
+def test_fit_obj_to_box():
+    text, _ = models3d.generate_mesh("box", sx=2.0, sy=1.0, sz=0.5)
+    fitted, report = models3d.fit_obj_to_box(text, (0.4, 0.2, 0.1), center=True)
+    after = report["after"]["size"]
+    assert abs(after[0] - 0.4) < 1e-3
+    assert abs(after[1] - 0.2) < 1e-3
+    assert abs(after[2] - 0.1) < 1e-3
+    center = report["after"]["center"]
+    assert abs(center[0]) < 1e-3
+    assert abs(center[1]) < 1e-3
+    assert abs(center[2]) < 1e-3
+    assert "v " in fitted
+
+
+def test_build_aligned_robot_diff_drive():
+    result = models3d.build_aligned_robot("diff_drive_2w")
+    assert result["ok"]
+    assert result["links"] >= 3  # chassis + 2 wheels (+ lidar)
+    urdf = Path(result["urdf"]).read_text(encoding="utf-8")
+    assert 'name="base_link"' in urdf
+    assert 'name="wheel_left"' in urdf
+    assert 'name="wheel_right"' in urdf
+    assert urdf.count("<robot") == 1
+    assert "continuous" in urdf
+    scene = result["scene"]
+    assert scene["count"] >= 3
+    assert all("mesh_url" in n for n in scene["nodes"])
+
+
+def test_build_aligned_robot_omni():
+    result = models3d.build_aligned_robot("omni_3w")
+    assert result["ok"]
+    urdf = Path(result["urdf"]).read_text(encoding="utf-8")
+    assert "wheel_0" in urdf
+    assert "wheel_1" in urdf
+    assert "wheel_2" in urdf
+
+
+def test_package_scene3d():
+    models3d.build_aligned_robot("diff_drive_2w")
+    scene = models3d.package_scene3d("diff_drive_2w")
+    assert scene["package"] == "diff_drive_2w"
+    assert scene["count"] >= 1
+    mesh_path = models3d.read_package_mesh("diff_drive_2w", Path(scene["nodes"][0]["mesh"]).name)
+    assert mesh_path.is_file()
 
 
 def test_all_mesh_presets_generate():

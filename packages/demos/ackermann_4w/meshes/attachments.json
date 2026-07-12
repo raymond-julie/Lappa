@@ -1,0 +1,60 @@
+[
+  {
+    "model_id": "ackermann_4w_chassis",
+    "link": "base_link",
+    "mesh": "meshes/ackermann_4w_chassis.obj",
+    "xyz": "0 0 0",
+    "rpy": "0 0 0",
+    "scale": "1 1 1",
+    "role": "chassis"
+  },
+  {
+    "model_id": "ackermann_4w_wheel_fl",
+    "link": "wheel_fl",
+    "mesh": "meshes/ackermann_4w_wheel_fl.obj",
+    "xyz": "0.18000 0.14000 -0.04000",
+    "rpy": "0 0 0.00000",
+    "scale": "1 1 1",
+    "role": "wheel",
+    "radius": 0.05
+  },
+  {
+    "model_id": "ackermann_4w_wheel_fr",
+    "link": "wheel_fr",
+    "mesh": "meshes/ackermann_4w_wheel_fr.obj",
+    "xyz": "0.18000 -0.14000 -0.04000",
+    "rpy": "0 0 0.00000",
+    "scale": "1 1 1",
+    "role": "wheel",
+    "radius": 0.05
+  },
+  {
+    "model_id": "ackermann_4w_wheel_rl",
+    "link": "wheel_rl",
+    "mesh": "meshes/ackermann_4w_wheel_rl.obj",
+    "xyz": "-0.18000 0.14000 -0.04000",
+    "rpy": "0 0 0.00000",
+    "scale": "1 1 1",
+    "role": "wheel",
+    "radius": 0.05
+  },
+  {
+    "model_id": "ackermann_4w_wheel_rr",
+    "link": "wheel_rr",
+    "mesh": "meshes/ackermann_4w_wheel_rr.obj",
+    "xyz": "-0.18000 -0.14000 -0.04000",
+    "rpy": "0 0 0.00000",
+    "scale": "1 1 1",
+    "role": "wheel",
+    "radius": 0.05
+  },
+  {
+    "model_id": "ackermann_4w_lidar",
+    "link": "lidar_link",
+    "mesh": "meshes/ackermann_4w_lidar.obj",
+    "xyz": "0.10000 0.00000 0.09000",
+    "rpy": "0 0 0",
+    "scale": "1 1 1",
+    "role": "lidar"
+  }
+]

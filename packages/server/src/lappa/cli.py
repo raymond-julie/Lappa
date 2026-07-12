@@ -61,10 +61,16 @@ def demo_cmd() -> None:
     # packager
     bundle = packager.package_bundle(["diff_drive_2w", "omni_3w"], distro="humble")
     rprint({"bundle": bundle["filename"], "size": bundle["size_bytes"]})
-    # 3D model
-    mesh = models3d.create_model("chassis", name="demo_chassis", sx=0.45, sy=0.32, sz=0.12)
-    att = models3d.attach_model_to_package("diff_drive_2w", mesh["id"])
-    rprint({"mesh": mesh["id"], "attached_urdf": att["urdf"]})
+    # Full aligned 3D robot (chassis + wheels + lidar fitted)
+    built = models3d.build_aligned_robot("diff_drive_2w")
+    rprint(
+        {
+            "3d_robot": built["package"],
+            "links": built["links"],
+            "models": built["models"],
+            "scene_nodes": built["scene"]["count"],
+        }
+    )
     # trajectory CSV
     from lappa.config import WORKSPACES
 
@@ -227,8 +233,52 @@ def model_list() -> None:
 def model_attach(
     package: str = typer.Argument(..., help="Demo package id"),
     model_id: str = typer.Argument(..., help="Model id from library"),
+    auto_fit: bool = typer.Option(True, "--auto-fit/--no-auto-fit"),
+    link: str = typer.Option("base_link", "--link"),
 ) -> None:
-    rprint(models3d.attach_model_to_package(package, model_id))
+    rprint(
+        models3d.attach_model_to_package(
+            package,
+            model_id,
+            link_name=link,
+            auto_fit=auto_fit,
+        )
+    )
+
+
+@model_app.command("fit")
+def model_fit(
+    model_id: str = typer.Argument(..., help="Library model id"),
+    sx: float = typer.Option(0.4, "--sx"),
+    sy: float = typer.Option(0.3, "--sy"),
+    sz: float = typer.Option(0.12, "--sz"),
+    uniform: bool = typer.Option(False, "--uniform"),
+    save_as: str | None = typer.Option(None, "--as", help="Output model id"),
+) -> None:
+    """Auto-scale mesh AABB to target size (khớp 3D)."""
+    rprint(
+        models3d.fit_library_model(
+            model_id,
+            [sx, sy, sz],
+            uniform=uniform,
+            save_as=save_as,
+        )
+    )
+
+
+@model_app.command("build-robot")
+def model_build_robot(
+    package: str = typer.Argument(..., help="Demo package id"),
+    kind: str | None = typer.Option(None, "--kind", "-k", help="Layout kind (default=package name)"),
+) -> None:
+    """Build full aligned 3D robot (chassis + wheels + lidar) into package URDF."""
+    rprint(models3d.build_aligned_robot(package, kind=kind))
+
+
+@model_app.command("scene")
+def model_scene(package: str = typer.Argument(...)) -> None:
+    """Print package scene3d JSON for the WebGL viewer."""
+    rprint(models3d.package_scene3d(package))
 
 
 @app.command("serve")

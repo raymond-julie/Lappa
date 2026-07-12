@@ -94,6 +94,10 @@ class BaseEngine:
 class DiffDrive2W(BaseEngine):
     kind = "diff_drive_2w"
 
+    def __init__(self, demo: str):
+        super().__init__(demo)
+        self.state.joints = [0.0, 0.0]  # left, right wheel angles (rad)
+
     def _integrate(self, dt: float) -> None:
         v = self.state.twist.linear_x
         w = self.state.twist.angular_z
@@ -101,10 +105,20 @@ class DiffDrive2W(BaseEngine):
         self.state.x += v * math.cos(th) * dt
         self.state.y += v * math.sin(th) * dt
         self.state.theta = _wrap(th + w * dt)
+        # wheel odometry spin for 3D viz (track ~0.32 m, r=0.05)
+        track, r = 0.32, 0.05
+        v_l = v - w * track / 2
+        v_r = v + w * track / 2
+        self.state.joints[0] = _wrap(self.state.joints[0] + (v_l / r) * dt)
+        self.state.joints[1] = _wrap(self.state.joints[1] + (v_r / r) * dt)
 
 
 class Omni3W(BaseEngine):
     kind = "omni_3w"
+
+    def __init__(self, demo: str):
+        super().__init__(demo)
+        self.state.joints = [0.0, 0.0, 0.0]
 
     def _integrate(self, dt: float) -> None:
         vx = self.state.twist.linear_x
@@ -115,6 +129,12 @@ class Omni3W(BaseEngine):
         self.state.x += (c * vx - s * vy) * dt
         self.state.y += (s * vx + c * vy) * dt
         self.state.theta = _wrap(th + w * dt)
+        r = 0.04
+        for i in range(3):
+            # approximate wheel spin from planar speed magnitude
+            self.state.joints[i] = _wrap(
+                self.state.joints[i] + (math.hypot(vx, vy) + abs(w) * 0.12) / r * dt * (1 if i % 2 == 0 else -1)
+            )
 
 
 class Tricycle3W(BaseEngine):

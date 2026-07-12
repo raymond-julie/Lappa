@@ -1,7 +1,153 @@
-﻿<?xml version="1.0"?>
+<?xml version="1.0"?>
+<!-- Lappa aligned 3D robot — package ackermann_4w -->
 <robot name="ackermann_4w">
-  <link name="base_link"/>
-  <!-- Simplified URDF placeholder for Lappa canvas / future mesh load -->
-  <link name="wheel_left"/>
-  <link name="wheel_right"/>
+  <link name="base_footprint"/>
+  <joint name="base_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 0.09000" rpy="0 0 0"/>
+  </joint>
+
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://ackermann_4w/meshes/ackermann_4w_chassis.obj" scale="1 1 1"/>
+      </geometry>
+      <material name="lappa_mesh">
+        <color rgba="0.2 0.55 0.95 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://ackermann_4w/meshes/ackermann_4w_chassis.obj" scale="1 1 1"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="wheel_fl">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://ackermann_4w/meshes/ackermann_4w_wheel_fl.obj" scale="1 1 1"/>
+      </geometry>
+      <material name="lappa_mesh">
+        <color rgba="0.15 0.15 0.18 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://ackermann_4w/meshes/ackermann_4w_wheel_fl.obj" scale="1 1 1"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="wheel_fl_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="wheel_fl"/>
+    <origin xyz="0.18000 0.14000 -0.04000" rpy="0 0 0.00000"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <link name="wheel_fr">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://ackermann_4w/meshes/ackermann_4w_wheel_fr.obj" scale="1 1 1"/>
+      </geometry>
+      <material name="lappa_mesh">
+        <color rgba="0.15 0.15 0.18 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://ackermann_4w/meshes/ackermann_4w_wheel_fr.obj" scale="1 1 1"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="wheel_fr_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="wheel_fr"/>
+    <origin xyz="0.18000 -0.14000 -0.04000" rpy="0 0 0.00000"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <link name="wheel_rl">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://ackermann_4w/meshes/ackermann_4w_wheel_rl.obj" scale="1 1 1"/>
+      </geometry>
+      <material name="lappa_mesh">
+        <color rgba="0.15 0.15 0.18 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://ackermann_4w/meshes/ackermann_4w_wheel_rl.obj" scale="1 1 1"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="wheel_rl_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="wheel_rl"/>
+    <origin xyz="-0.18000 0.14000 -0.04000" rpy="0 0 0.00000"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <link name="wheel_rr">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://ackermann_4w/meshes/ackermann_4w_wheel_rr.obj" scale="1 1 1"/>
+      </geometry>
+      <material name="lappa_mesh">
+        <color rgba="0.15 0.15 0.18 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://ackermann_4w/meshes/ackermann_4w_wheel_rr.obj" scale="1 1 1"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="wheel_rr_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="wheel_rr"/>
+    <origin xyz="-0.18000 -0.14000 -0.04000" rpy="0 0 0.00000"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <link name="lidar_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://ackermann_4w/meshes/ackermann_4w_lidar.obj" scale="1 1 1"/>
+      </geometry>
+      <material name="lappa_mesh">
+        <color rgba="0.95 0.55 0.2 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://ackermann_4w/meshes/ackermann_4w_lidar.obj" scale="1 1 1"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="lidar_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="lidar_link"/>
+    <origin xyz="0.10000 0.00000 0.09000" rpy="0 0 0"/>
+  </joint>
+
 </robot>

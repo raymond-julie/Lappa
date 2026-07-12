@@ -147,14 +147,24 @@ button { font-family: inherit; cursor: pointer; }
   display: flex; flex-direction: column; background: #0a0e14; min-height: 0;
 }
 .sim-head {
-  display: flex; justify-content: space-between; padding: 8px 12px;
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600;
 }
+.view-toggle { display: inline-flex; gap: 4px; }
+.btn.sm { padding: 2px 8px; font-size: 11px; }
+.btn.sm.on { border-color: var(--accent); color: var(--accent); background: #1f6feb22; }
 #viewport {
   flex: 1; width: 100%; background:
     radial-gradient(circle at 50% 50%, #121a24 0%, #0a0e14 70%);
   cursor: crosshair; outline: none;
 }
+.viewport3d {
+  flex: 1; width: 100%; min-height: 200px; position: relative;
+  background: radial-gradient(circle at 40% 30%, #152033 0%, #0a0e14 70%);
+  overflow: hidden;
+}
+.viewport3d canvas { width: 100% !important; height: 100% !important; display: block; }
 .topics {
   display: grid; grid-template-columns: 1fr; gap: 4px; padding: 8px;
   border-top: 1px solid var(--border); font-family: var(--mono); font-size: 11px;

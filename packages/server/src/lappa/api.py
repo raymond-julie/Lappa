@@ -88,9 +88,24 @@ class ModelAttachBody(BaseModel):
     package: str
     model_id: str
     link_name: str = "base_link"
-    xyz: str = "0 0 0.05"
+    xyz: str = "0 0 0"
     rpy: str = "0 0 0"
     scale: str = "1 1 1"
+    auto_fit: bool = True
+    target_size: list[float] | None = None
+    replace: bool = True
+
+
+class ModelFitBody(BaseModel):
+    model_id: str
+    target_size: list[float] = [0.4, 0.3, 0.12]
+    uniform: bool = False
+    save_as: str | None = None
+
+
+class BuildRobotBody(BaseModel):
+    package: str
+    kind: str | None = None
 
 
 @app.get("/health")
@@ -316,7 +331,32 @@ def api_model_attach(body: ModelAttachBody) -> dict:
             xyz=body.xyz,
             rpy=body.rpy,
             scale=body.scale,
+            auto_fit=body.auto_fit,
+            target_size=body.target_size,
+            replace=body.replace,
         )
+    except (ValueError, FileNotFoundError) as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.post("/api/models/fit")
+def api_model_fit(body: ModelFitBody) -> dict:
+    try:
+        return models3d.fit_library_model(
+            body.model_id,
+            body.target_size,
+            uniform=body.uniform,
+            save_as=body.save_as,
+        )
+    except (ValueError, FileNotFoundError) as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.post("/api/models/build-robot")
+def api_build_robot(body: BuildRobotBody) -> dict:
+    """Generate full aligned multi-link 3D robot (chassis + wheels + lidar)."""
+    try:
+        return models3d.build_aligned_robot(body.package, kind=body.kind)
     except (ValueError, FileNotFoundError) as e:
         raise HTTPException(400, str(e)) from e
 
@@ -327,6 +367,36 @@ def api_model_attachments(package: str) -> list[dict]:
         return models3d.package_attachments(package)
     except FileNotFoundError as e:
         raise HTTPException(404, str(e)) from e
+
+
+@app.get("/api/models/{model_id}/obj")
+def api_model_obj(model_id: str):
+    from fastapi.responses import PlainTextResponse
+
+    try:
+        text = models3d.get_model_obj(model_id)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e)) from e
+    return PlainTextResponse(text, media_type="text/plain")
+
+
+@app.get("/api/packages/{package}/scene3d")
+def api_package_scene3d(package: str) -> dict:
+    try:
+        return models3d.package_scene3d(package)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e)) from e
+
+
+@app.get("/api/packages/{package}/mesh/{filename}")
+def api_package_mesh(package: str, filename: str):
+    from fastapi.responses import PlainTextResponse
+
+    try:
+        path = models3d.read_package_mesh(package, filename)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e)) from e
+    return PlainTextResponse(path.read_text(encoding="utf-8"), media_type="text/plain")
 
 
 # Static IDE

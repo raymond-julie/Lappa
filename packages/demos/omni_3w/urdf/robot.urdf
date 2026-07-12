@@ -1,102 +1,128 @@
-﻿<?xml version="1.0"?>
+<?xml version="1.0"?>
+<!-- Lappa aligned 3D robot — package omni_3w -->
 <robot name="omni_3w">
-  <link name="base_link"/>
-  <!-- Simplified URDF placeholder for Lappa canvas / future mesh load -->
-  <link name="wheel_left"/>
-  <link name="wheel_right"/>
+  <link name="base_footprint"/>
+  <joint name="base_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 0.07000" rpy="0 0 0"/>
+  </joint>
 
   <link name="base_link">
     <visual>
-      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://omni_3w/meshes/api_chassis.obj" scale="1 1 1"/>
+        <mesh filename="package://omni_3w/meshes/omni_3w_chassis.obj" scale="1 1 1"/>
       </geometry>
       <material name="lappa_mesh">
         <color rgba="0.2 0.55 0.95 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://omni_3w/meshes/api_chassis.obj" scale="1 1 1"/>
+        <mesh filename="package://omni_3w/meshes/omni_3w_chassis.obj" scale="1 1 1"/>
       </geometry>
     </collision>
   </link>
 
-
-  <link name="base_link_mesh">
+  <link name="wheel_0">
     <visual>
-      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://omni_3w/meshes/api_chassis.obj" scale="1 1 1"/>
+        <mesh filename="package://omni_3w/meshes/omni_3w_wheel_0.obj" scale="1 1 1"/>
       </geometry>
       <material name="lappa_mesh">
-        <color rgba="0.2 0.55 0.95 1"/>
+        <color rgba="0.15 0.15 0.18 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://omni_3w/meshes/api_chassis.obj" scale="1 1 1"/>
+        <mesh filename="package://omni_3w/meshes/omni_3w_wheel_0.obj" scale="1 1 1"/>
       </geometry>
     </collision>
   </link>
 
+  <joint name="wheel_0_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="wheel_0"/>
+    <origin xyz="0.12000 0.00000 -0.03000" rpy="0 0 0.00000"/>
+    <axis xyz="0 1 0"/>
+  </joint>
 
-  <link name="base_link_mesh">
+  <link name="wheel_1">
     <visual>
-      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://omni_3w/meshes/api_chassis.obj" scale="1 1 1"/>
+        <mesh filename="package://omni_3w/meshes/omni_3w_wheel_1.obj" scale="1 1 1"/>
       </geometry>
       <material name="lappa_mesh">
-        <color rgba="0.2 0.55 0.95 1"/>
+        <color rgba="0.15 0.15 0.18 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://omni_3w/meshes/api_chassis.obj" scale="1 1 1"/>
+        <mesh filename="package://omni_3w/meshes/omni_3w_wheel_1.obj" scale="1 1 1"/>
       </geometry>
     </collision>
   </link>
 
+  <joint name="wheel_1_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="wheel_1"/>
+    <origin xyz="-0.06000 0.10400 -0.03000" rpy="0 0 2.09400"/>
+    <axis xyz="0 1 0"/>
+  </joint>
 
-  <link name="base_link_mesh">
+  <link name="wheel_2">
     <visual>
-      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://omni_3w/meshes/api_chassis.obj" scale="1 1 1"/>
+        <mesh filename="package://omni_3w/meshes/omni_3w_wheel_2.obj" scale="1 1 1"/>
       </geometry>
       <material name="lappa_mesh">
-        <color rgba="0.2 0.55 0.95 1"/>
+        <color rgba="0.15 0.15 0.18 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://omni_3w/meshes/api_chassis.obj" scale="1 1 1"/>
+        <mesh filename="package://omni_3w/meshes/omni_3w_wheel_2.obj" scale="1 1 1"/>
       </geometry>
     </collision>
   </link>
 
+  <joint name="wheel_2_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="wheel_2"/>
+    <origin xyz="-0.06000 -0.10400 -0.03000" rpy="0 0 -2.09400"/>
+    <axis xyz="0 1 0"/>
+  </joint>
 
-  <link name="base_link_mesh">
+  <link name="lidar_link">
     <visual>
-      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://omni_3w/meshes/api_chassis.obj" scale="1 1 1"/>
+        <mesh filename="package://omni_3w/meshes/omni_3w_lidar.obj" scale="1 1 1"/>
       </geometry>
       <material name="lappa_mesh">
-        <color rgba="0.2 0.55 0.95 1"/>
+        <color rgba="0.95 0.55 0.2 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://omni_3w/meshes/api_chassis.obj" scale="1 1 1"/>
+        <mesh filename="package://omni_3w/meshes/omni_3w_lidar.obj" scale="1 1 1"/>
       </geometry>
     </collision>
   </link>
+
+  <joint name="lidar_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="lidar_link"/>
+    <origin xyz="0.00000 0.00000 0.07000" rpy="0 0 0"/>
+  </joint>
 
 </robot>

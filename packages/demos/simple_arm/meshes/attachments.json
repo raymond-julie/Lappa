@@ -1,0 +1,29 @@
+[
+  {
+    "model_id": "simple_arm_chassis",
+    "link": "base_link",
+    "mesh": "meshes/simple_arm_chassis.obj",
+    "xyz": "0 0 0",
+    "rpy": "0 0 0",
+    "scale": "1 1 1",
+    "role": "chassis"
+  },
+  {
+    "model_id": "simple_arm_link1",
+    "link": "link1",
+    "mesh": "meshes/simple_arm_link1.obj",
+    "xyz": "0.25000 0.00000 0.05000",
+    "rpy": "0 0 0",
+    "scale": "1 1 1",
+    "role": "arm_link"
+  },
+  {
+    "model_id": "simple_arm_link2",
+    "link": "link2",
+    "mesh": "meshes/simple_arm_link2.obj",
+    "xyz": "0.70000 0.00000 0.05000",
+    "rpy": "0 0 0",
+    "scale": "1 1 1",
+    "role": "arm_link"
+  }
+]
