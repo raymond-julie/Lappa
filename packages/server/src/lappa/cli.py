@@ -142,6 +142,31 @@ def sim_cmd(
     rprint(SESSION.cmd(lx, ly, az))
 
 
+@sim_app.command("summary")
+def sim_summary() -> None:
+    """Print compact sim session summary (pose, joints count, lidar rays)."""
+    st = SESSION.status()
+    state = st.get("state") or st
+    lidar = state.get("lidar") or []
+    joints = state.get("joints") or []
+    rprint(
+        {
+            "demo": state.get("demo") or st.get("demo"),
+            "kind": state.get("kind"),
+            "running": state.get("running"),
+            "pose": {
+                "x": state.get("x"),
+                "y": state.get("y"),
+                "theta": state.get("theta"),
+            },
+            "n_joints": len(joints),
+            "n_lidar": len(lidar),
+            "lidar_min": min(lidar) if lidar else None,
+            "t": state.get("t"),
+        }
+    )
+
+
 @sim_app.command("trajectory")
 def sim_trajectory(
     out: Path | None = typer.Option(None, "--out", "-o", help="Write CSV path"),
