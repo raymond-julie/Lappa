@@ -55,10 +55,63 @@ def _wrap(a: float) -> float:
     return (a + math.pi) % (2 * math.pi) - math.pi
 
 
-def _lidar_circle(n: int = 36, radius: float = 3.0, noise: float = 0.0) -> list[float]:
-    # Synthetic free-space ring (placeholder until map obstacles)
-    base = radius
-    return [base + noise * math.sin(i) for i in range(n)]
+# Simple axis-aligned obstacles in world frame (x, y, half_w, half_h)
+DEFAULT_OBSTACLES: list[tuple[float, float, float, float]] = [
+    (2.0, 0.5, 0.35, 0.35),
+    (-1.5, 1.2, 0.4, 0.25),
+    (0.8, -1.8, 0.3, 0.5),
+]
+
+
+def _ray_hit_aabb(
+    ox: float,
+    oy: float,
+    dx: float,
+    dy: float,
+    cx: float,
+    cy: float,
+    hx: float,
+    hy: float,
+    max_r: float,
+) -> float | None:
+    """Ray vs AABB (center + half extents). Return distance or None."""
+    inv_dx = 1e9 if abs(dx) < 1e-9 else 1.0 / dx
+    inv_dy = 1e9 if abs(dy) < 1e-9 else 1.0 / dy
+    tx1 = (cx - hx - ox) * inv_dx
+    tx2 = (cx + hx - ox) * inv_dx
+    ty1 = (cy - hy - oy) * inv_dy
+    ty2 = (cy + hy - oy) * inv_dy
+    tmin = max(min(tx1, tx2), min(ty1, ty2))
+    tmax = min(max(tx1, tx2), max(ty1, ty2))
+    if tmax < 0 or tmin > tmax:
+        return None
+    t = tmin if tmin >= 0 else tmax
+    if t < 0 or t > max_r:
+        return None
+    return t
+
+
+def _lidar_scan(
+    x: float,
+    y: float,
+    theta: float,
+    n: int = 36,
+    max_range: float = 3.0,
+    obstacles: list[tuple[float, float, float, float]] | None = None,
+) -> list[float]:
+    """Synthetic 2D lidar: free-space ring shortened by AABB obstacle hits."""
+    obs = obstacles if obstacles is not None else DEFAULT_OBSTACLES
+    ranges: list[float] = []
+    for i in range(n):
+        ang = theta + (2 * math.pi * i / n)
+        dx, dy = math.cos(ang), math.sin(ang)
+        hit = max_range
+        for cx, cy, hx, hy in obs:
+            d = _ray_hit_aabb(x, y, dx, dy, cx, cy, hx, hy, max_range)
+            if d is not None and d < hit:
+                hit = d
+        ranges.append(hit)
+    return ranges
 
 
 class BaseEngine:
@@ -67,6 +120,7 @@ class BaseEngine:
     def __init__(self, demo: str):
         self.state = SimState(demo=demo, kind=self.kind)
         self._last = time.monotonic()
+        self.obstacles = list(DEFAULT_OBSTACLES)
 
     def set_cmd(self, linear_x: float = 0.0, linear_y: float = 0.0, angular_z: float = 0.0) -> None:
         self.state.twist = Twist(linear_x, linear_y, angular_z)
@@ -91,7 +145,9 @@ class BaseEngine:
         if self.state.running:
             self._integrate(dt)
             self.state.t += dt
-            self.state.lidar = _lidar_circle()
+            self.state.lidar = _lidar_scan(
+                self.state.x, self.state.y, self.state.theta, obstacles=self.obstacles
+            )
         return self.state
 
     def _integrate(self, dt: float) -> None:
