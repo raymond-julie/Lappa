@@ -1,0 +1,130 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Optional release tag label (info only)"
+        required: false
+        default: "manual"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build Windows exe
+        shell: pwsh
+        run: |
+          cd packages/server
+          python -m pip install -U pip
+          python -m pip install -e ".[release]"
+          python -m PyInstaller --noconfirm --clean lappa.spec
+          New-Item -ItemType Directory -Force -Path ../../dist/release | Out-Null
+          Copy-Item dist/lappa.exe ../../dist/release/lappa-windows-x64.exe
+          ./../../dist/release/lappa-windows-x64.exe version
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lappa-windows-x64
+          path: dist/release/lappa-windows-x64.exe
+          if-no-files-found: error
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build Linux binary
+        run: |
+          cd packages/server
+          python -m pip install -U pip
+          python -m pip install -e ".[release]"
+          python -m PyInstaller --noconfirm --clean lappa.spec
+          mkdir -p ../../dist/release
+          cp dist/lappa ../../dist/release/lappa-linux-x64
+          chmod +x ../../dist/release/lappa-linux-x64
+          ../../dist/release/lappa-linux-x64 version
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lappa-linux-x64
+          path: dist/release/lappa-linux-x64
+          if-no-files-found: error
+
+  publish-release:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Prepare files
+        run: |
+          mkdir -p release_assets
+          cp artifacts/lappa-windows-x64/lappa-windows-x64.exe release_assets/
+          cp artifacts/lappa-linux-x64/lappa-linux-x64 release_assets/
+          chmod +x release_assets/lappa-linux-x64
+          cd release_assets
+          sha256sum lappa-windows-x64.exe lappa-linux-x64 > SHA256SUMS.txt
+          ls -lh
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release_assets/lappa-windows-x64.exe
+            release_assets/lappa-linux-x64
+            release_assets/SHA256SUMS.txt
+          generate_release_notes: true
+          body: |
+            ## Lappa binaries
+
+            | File | Platform |
+            | --- | --- |
+            | `lappa-windows-x64.exe` | Windows 10/11 x64 |
+            | `lappa-linux-x64` | Linux x64 (glibc) |
+
+            ### Run
+            **Windows:** double-click or `.\lappa-windows-x64.exe` (opens IDE in browser on http://127.0.0.1:8840)
+
+            **Linux:**
+            ```bash
+            chmod +x lappa-linux-x64
+            ./lappa-linux-x64
+            ```
+
+            CLI: `./lappa-windows-x64.exe demo` · `./lappa-linux-x64 ros2 list`
+
+            Data folder is created beside the binary: `lappa_data/` (demos, workspaces).
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Manual / non-tag: keep artifacts only (no release)
+  package-manual:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Re-upload combined
+        uses: actions/upload-artifact@v4
+        with:
+          name: lappa-binaries-all
+          path: artifacts/**

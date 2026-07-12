@@ -7,6 +7,11 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+*.spec.bak
+packages/server/dist/
+packages/server/build/
+packages/server/*.egg-info/
+lappa_data/
 .env
 .env.*
 !.env.example

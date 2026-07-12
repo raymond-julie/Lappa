@@ -14,5 +14,13 @@
     "xyz": "0 0 0.05",
     "rpy": "0 0 0",
     "scale": "1 1 1"
+  },
+  {
+    "model_id": "api_chassis",
+    "link": "base_link_mesh",
+    "mesh": "meshes/api_chassis.obj",
+    "xyz": "0 0 0.05",
+    "rpy": "0 0 0",
+    "scale": "1 1 1"
   }
 ]

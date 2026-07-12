@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lappa"
-version = "0.2.0"
+version = "0.2.1"
 description = "Lappa — ROS2 package IDE: multi-distro, packager, 3D meshes, native sim + Docker"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -15,14 +15,19 @@ dependencies = [
   "rich>=13.7",
   "pydantic>=2.6",
   "watchdog>=4.0",
+  "fastapi>=0.110",
+  "uvicorn>=0.27",
+  "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.4", "httpx>=0.27"]
 api = ["fastapi>=0.110", "uvicorn>=0.27", "httpx>=0.27"]
+release = ["pyinstaller>=6.0"]
 
 [project.scripts]
 lappa = "lappa.cli:app"
+lappa-desktop = "lappa.desktop:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

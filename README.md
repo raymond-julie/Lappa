@@ -109,16 +109,55 @@ Presets: `box`, `cylinder`, `sphere`, `wheel`, `chassis`, `arm_link`, `lidar_dom
 
 IDE → **🧊 Models** → generate OBJ → **Attach to active package** (writes `meshes/*.obj` + patches `urdf/robot.urdf`). Include meshes when you **bundle** the package.
 
-## Quick start (Windows, offline)
+## Download binaries (Windows / Linux)
+
+GitHub Releases ship standalone builds (no Python install):
+
+| File | Platform |
+| --- | --- |
+| `lappa-windows-x64.exe` | Windows 10/11 |
+| `lappa-linux-x64` | Linux x64 |
+
+```powershell
+# Windows — double-click or:
+.\lappa-windows-x64.exe
+# opens http://127.0.0.1:8840  (data in .\lappa_data\)
+.\lappa-windows-x64.exe demo
+```
+
+```bash
+chmod +x lappa-linux-x64
+./lappa-linux-x64
+./lappa-linux-x64 ros2 list
+```
+
+**Build locally:** see [docs/RELEASE.md](docs/RELEASE.md)
+
+```powershell
+# Windows
+pwsh scripts\build_release.ps1
+# → dist\release\lappa-windows-x64.exe
+```
+
+```bash
+# Linux
+bash scripts/build_release.sh
+# → dist/release/lappa-linux-x64
+```
+
+Tag `v*` on GitHub → Actions builds both OS and attaches assets to the Release.
+
+## Quick start (Windows, offline, from source)
 
 ```powershell
 cd D:\ThanhTrucSolutions\Lappa\packages\server
 python -m venv .venv
 .\.venv\Scripts\activate
-pip install -e ".[dev,api]"
+pip install -e ".[dev]"
 
 lappa demo
 lappa serve --port 8840
+# or: lappa desktop   # serve + open browser
 ```
 
 Open **http://127.0.0.1:8840** — IDE loads with demo packages.

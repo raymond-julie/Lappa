@@ -208,8 +208,14 @@ def model_attach(
 def serve_cmd(
     host: str = typer.Option("127.0.0.1", "--host"),
     port: int = typer.Option(8840, "--port"),
+    open_browser: bool = typer.Option(False, "--open/--no-open", help="Open system browser"),
 ) -> None:
     """Serve IDE + API."""
+    if open_browser:
+        from lappa.desktop import run_desktop
+
+        run_desktop(host=host, port=port, open_browser=True)
+        return
     ensure_dirs()
     try:
         import uvicorn
@@ -219,6 +225,18 @@ def serve_cmd(
 
     rprint(f"Lappa IDE → http://{host}:{port}")
     uvicorn.run(fastapi_app, host=host, port=port, log_level="info")
+
+
+@app.command("desktop")
+def desktop_cmd(
+    host: str = typer.Option("127.0.0.1", "--host"),
+    port: int = typer.Option(8840, "--port"),
+    no_browser: bool = typer.Option(False, "--no-browser"),
+) -> None:
+    """Launch IDE server and open the browser (release builds default here)."""
+    from lappa.desktop import run_desktop
+
+    run_desktop(host=host, port=port, open_browser=not no_browser)
 
 
 if __name__ == "__main__":
