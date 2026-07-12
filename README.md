@@ -23,6 +23,7 @@
 
 - [Highlights](#highlights)
 - [Screenshots](#screenshots)
+- [Diagrams](#diagrams)
 - [Architecture](#architecture)
 - [Quick start](#quick-start)
 - [CLI reference](#cli-reference)
@@ -79,6 +80,18 @@ Captures from live product demos and the IDE.
 > **3D WebGL:** after `lappa model build-robot <demo>` (or IDE → Models → **Build full 3D robot**), open the sim panel and switch **2D → 3D** for orbit view of chassis, wheels, and lidar.
 
 ---
+
+
+## Diagrams
+
+Interactive Archify diagrams (dark/light theme, export PNG/SVG in the HTML viewer):
+
+| Diagram | Interactive | README embed |
+| --- | --- | --- |
+| **Architecture** | [docs/diagrams/architecture.html](docs/diagrams/architecture.html) | ![Architecture](docs/diagrams/architecture.svg) |
+| **Workflow** | [docs/diagrams/workflow.html](docs/diagrams/workflow.html) | ![Workflow](docs/diagrams/workflow.svg) |
+
+*Generated with [archify](https://github.com/tt-a1i) — open the `.html` files for theme toggle and export.*
 
 ## Architecture
 
