@@ -1,0 +1,7 @@
+﻿<?xml version="1.0"?>
+<robot name="ackermann_4w">
+  <link name="base_link"/>
+  <!-- Simplified URDF placeholder for Lappa canvas / future mesh load -->
+  <link name="wheel_left"/>
+  <link name="wheel_right"/>
+</robot>

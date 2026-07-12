@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lappa — ROS2 Package IDE</title>
+  <link rel="stylesheet" href="/assets/ide.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div id="app">
+    <!-- Title bar -->
+    <header class="titlebar">
+      <div class="brand">
+        <span class="logo">◆</span>
+        <span class="name">Lappa</span>
+        <span class="tag">ROS2 IDE</span>
+      </div>
+      <div class="toolbar">
+        <button id="btn-run" class="btn primary" title="Start native sim">▶ Run Sim</button>
+        <button id="btn-stop" class="btn" title="Stop sim">■ Stop</button>
+        <button id="btn-hot" class="btn toggle on" title="Toggle hot reload">⚡ Hot Reload</button>
+        <button id="btn-docker" class="btn" title="Docker show status">🐳 Docker</button>
+        <span id="status-pill" class="pill idle">idle</span>
+      </div>
+      <div class="title-right">
+        <span id="pkg-label" class="muted">no package</span>
+        <span class="ver">v0.1</span>
+      </div>
+    </header>
+
+    <div class="main">
+      <!-- Activity bar -->
+      <nav class="activity">
+        <button class="act on" data-panel="explorer" title="Explorer">📁</button>
+        <button class="act" data-panel="demos" title="Demos">🤖</button>
+        <button class="act" data-panel="sim" title="Sim controls">🎛</button>
+        <button class="act" data-panel="docker" title="Docker">🐳</button>
+      </nav>
+
+      <!-- Side panels -->
+      <aside class="sidebar" id="sidebar">
+        <section class="panel on" id="panel-explorer">
+          <div class="panel-title">Explorer</div>
+          <div id="file-tree" class="tree"></div>
+        </section>
+        <section class="panel" id="panel-demos">
+          <div class="panel-title">Robot demos</div>
+          <div id="demo-list" class="demo-list"></div>
+        </section>
+        <section class="panel" id="panel-sim">
+          <div class="panel-title">Teleop</div>
+          <div class="teleop">
+            <label>linear.x <input type="range" id="lx" min="-1" max="1" step="0.05" value="0" /></label>
+            <label>linear.y <input type="range" id="ly" min="-1" max="1" step="0.05" value="0" /></label>
+            <label>angular.z <input type="range" id="az" min="-1.5" max="1.5" step="0.05" value="0" /></label>
+            <button id="btn-zero" class="btn block">Zero twist</button>
+            <p class="hint">WASD / QE also work when canvas focused</p>
+          </div>
+        </section>
+        <section class="panel" id="panel-docker">
+          <div class="panel-title">Docker show mode</div>
+          <pre id="docker-info" class="logbox">Checking…</pre>
+          <button id="btn-docker-refresh" class="btn block">Refresh</button>
+          <button id="btn-docker-start" class="btn block primary">Start runtime</button>
+        </section>
+      </aside>
+
+      <!-- Editor + sim -->
+      <div class="center">
+        <div class="tabs" id="tabs"></div>
+        <div class="split">
+          <div class="editor-wrap">
+            <div id="editor"></div>
+          </div>
+          <div class="sim-wrap">
+            <div class="sim-head">
+              <span>Simulation</span>
+              <span id="sim-meta" class="muted">native</span>
+            </div>
+            <canvas id="viewport" width="640" height="480" tabindex="0"></canvas>
+            <div class="topics" id="topics">
+              <div class="topic"><span class="tname">/cmd_vel</span><span id="t-cmd" class="tval">—</span></div>
+              <div class="topic"><span class="tname">/odom</span><span id="t-odom" class="tval">—</span></div>
+              <div class="topic"><span class="tname">/scan</span><span id="t-scan" class="tval">—</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="bottom">
+          <div class="bottom-tabs">
+            <span class="on">Console</span>
+            <span id="reload-badge" class="badge">reloads: 0</span>
+          </div>
+          <pre id="console" class="console"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.49.0/min/vs/loader.js"></script>
+  <script src="/assets/ide.js"></script>
+</body>
+</html>

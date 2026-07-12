@@ -1,0 +1,14 @@
+﻿<?xml version="1.0"?>
+<package format="3">
+  <name>omni_3w</name>
+  <version>0.1.0</version>
+  <description>Holonomic 3-wheel omnidirectional base</description>
+  <maintainer email="lappa@mergeos.shop">Lappa</maintainer>
+  <license>MIT</license>
+  <depend>rclpy</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

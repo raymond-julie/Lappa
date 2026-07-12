@@ -1,0 +1,4 @@
+﻿# Lappa sim defaults
+max_linear: 1.0
+max_angular: 1.5
+lidar_rays: 36

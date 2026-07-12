@@ -1,0 +1,7 @@
+﻿<?xml version="1.0"?>
+<robot name="diff_drive_2w">
+  <link name="base_link"/>
+  <!-- Simplified URDF placeholder for Lappa canvas / future mesh load -->
+  <link name="wheel_left"/>
+  <link name="wheel_right"/>
+</robot>
