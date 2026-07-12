@@ -30,5 +30,37 @@
     "xyz": "0 0 0.05",
     "rpy": "0 0 0",
     "scale": "1 1 1"
+  },
+  {
+    "model_id": "unit_wheel",
+    "link": "base_link_mesh",
+    "mesh": "meshes/unit_wheel.obj",
+    "xyz": "0 0 0.05",
+    "rpy": "0 0 0",
+    "scale": "1 1 1"
+  },
+  {
+    "model_id": "demo_chassis",
+    "link": "base_link_mesh",
+    "mesh": "meshes/demo_chassis.obj",
+    "xyz": "0 0 0.05",
+    "rpy": "0 0 0",
+    "scale": "1 1 1"
+  },
+  {
+    "model_id": "unit_wheel",
+    "link": "base_link_mesh",
+    "mesh": "meshes/unit_wheel.obj",
+    "xyz": "0 0 0.05",
+    "rpy": "0 0 0",
+    "scale": "1 1 1"
+  },
+  {
+    "model_id": "demo_chassis",
+    "link": "base_link_mesh",
+    "mesh": "meshes/demo_chassis.obj",
+    "xyz": "0 0 0.05",
+    "rpy": "0 0 0",
+    "scale": "1 1 1"
   }
 ]

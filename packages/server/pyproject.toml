@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lappa"
-version = "0.2.1"
+version = "0.2.2"
 description = "Lappa — ROS2 package IDE: multi-distro, packager, 3D meshes, native sim + Docker"
 readme = "README.md"
 requires-python = ">=3.11"

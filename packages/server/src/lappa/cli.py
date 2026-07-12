@@ -65,9 +65,22 @@ def demo_cmd() -> None:
     mesh = models3d.create_model("chassis", name="demo_chassis", sx=0.45, sy=0.32, sz=0.12)
     att = models3d.attach_model_to_package("diff_drive_2w", mesh["id"])
     rprint({"mesh": mesh["id"], "attached_urdf": att["urdf"]})
+    # trajectory CSV
+    from lappa.config import WORKSPACES
+
+    SESSION.start("diff_drive_2w", DEMOS_ROOT / "diff_drive_2w")
+    SESSION.cmd(linear_x=0.5, angular_z=0.3)
+    for _ in range(8):
+        time.sleep(0.05)
+        SESSION.tick()
+    WORKSPACES.mkdir(parents=True, exist_ok=True)
+    csv_path = WORKSPACES / "demo_trajectory.csv"
+    csv_path.write_text(SESSION.trajectory_csv(), encoding="utf-8")
+    rprint({"trajectory_csv": str(csv_path), "points": SESSION.status()["trajectory_points"]})
+    SESSION.stop()
     dstat = docker_bridge.status()
     rprint({"docker": dstat["available"], "daemon": dstat.get("daemon"), "ide": IDE_ROOT.is_dir()})
-    rprint("Lappa demo complete (sim + ros2 version + package + 3d).")
+    rprint("Lappa demo complete (sim + ros2 version + package + 3d + trajectory).")
 
 
 @demos_app.command("list")
@@ -113,6 +126,20 @@ def sim_cmd(
     az: float = typer.Option(0.1, "--az"),
 ) -> None:
     rprint(SESSION.cmd(lx, ly, az))
+
+
+@sim_app.command("trajectory")
+def sim_trajectory(
+    out: Path | None = typer.Option(None, "--out", "-o", help="Write CSV path"),
+) -> None:
+    """Export recorded odom trail as CSV."""
+    csv = SESSION.trajectory_csv()
+    if out:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(csv, encoding="utf-8")
+        rprint({"ok": True, "path": str(out), "bytes": out.stat().st_size})
+    else:
+        print(csv)
 
 
 @docker_app.command("status")

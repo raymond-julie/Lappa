@@ -182,6 +182,24 @@ def api_sim_cmd(body: CmdBody) -> dict:
     return SESSION.cmd(body.linear_x, body.linear_y, body.angular_z)
 
 
+@app.get("/api/sim/trajectory.csv")
+def api_sim_trajectory_csv():
+    from fastapi.responses import Response
+
+    csv = SESSION.trajectory_csv()
+    return Response(
+        content=csv,
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="lappa_trajectory.csv"'},
+    )
+
+
+@app.post("/api/sim/trajectory/clear")
+def api_sim_trajectory_clear() -> dict:
+    SESSION.clear_trajectory()
+    return {"ok": True, "trajectory_points": 0}
+
+
 @app.post("/api/hot-reload")
 def api_hot_reload(body: HotReloadBody) -> dict:
     SESSION.hot_reload = body.enabled

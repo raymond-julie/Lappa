@@ -39,3 +39,18 @@ def test_arm_fk_updates():
     st = eng.step()
     assert len(st.joints) == 2
     assert st.lidar  # synthetic
+
+
+def test_trajectory_csv():
+    from lappa.sim.session import SimSession
+
+    s = SimSession()
+    s.start("diff_drive_2w")
+    s.cmd(0.5, 0.0, 0.2)
+    for _ in range(3):
+        s.engine._last -= 0.05  # type: ignore[union-attr]
+        s.tick()
+    csv = s.trajectory_csv()
+    assert "t,x,y,theta" in csv
+    assert csv.count("\n") >= 3
+    s.stop()

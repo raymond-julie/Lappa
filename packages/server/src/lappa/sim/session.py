@@ -20,6 +20,7 @@ class SimSession:
         self.reload_count = 0
         self.last_reload_at: float | None = None
         self.logs: list[str] = []
+        self.trajectory: list[dict[str, Any]] = []
         self._stop_watch = threading.Event()
         self._watch_thread: threading.Thread | None = None
         self._mtimes: dict[str, float] = {}
@@ -36,6 +37,7 @@ class SimSession:
             self.engine = create_engine(demo_id)
             self.engine.state.running = True
             self.engine.state.message = "native sim running"
+            self.trajectory = []
             if package_path:
                 self.package = load_package(package_path)
             self.log(f"sim start demo={demo_id} mode=native")
@@ -64,6 +66,19 @@ class SimSession:
             if not self.engine:
                 return {"running": False}
             st = self.engine.step()
+            row = {
+                "t": round(st.t, 4),
+                "x": round(st.x, 6),
+                "y": round(st.y, 6),
+                "theta": round(st.theta, 6),
+                "linear_x": st.twist.linear_x,
+                "linear_y": st.twist.linear_y,
+                "angular_z": st.twist.angular_z,
+                "demo": st.demo,
+            }
+            self.trajectory.append(row)
+            if len(self.trajectory) > 5000:
+                self.trajectory = self.trajectory[-5000:]
             return st.to_dict()
 
     def status(self) -> dict[str, Any]:
@@ -78,8 +93,23 @@ class SimSession:
             "hot_reload": self.hot_reload,
             "reload_count": self.reload_count,
             "last_reload_at": self.last_reload_at,
+            "trajectory_points": len(self.trajectory),
             "logs": self.logs[-40:],
         }
+
+    def trajectory_csv(self) -> str:
+        with self._lock:
+            lines = ["t,x,y,theta,linear_x,linear_y,angular_z,demo"]
+            for r in self.trajectory:
+                lines.append(
+                    f"{r['t']},{r['x']},{r['y']},{r['theta']},"
+                    f"{r['linear_x']},{r['linear_y']},{r['angular_z']},{r['demo']}"
+                )
+            return "\n".join(lines) + ("\n" if lines else "")
+
+    def clear_trajectory(self) -> None:
+        with self._lock:
+            self.trajectory = []
 
     def notify_file_change(self, rel: str) -> None:
         with self._lock:
