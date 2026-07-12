@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -435,8 +436,10 @@ class MainWindow(QMainWindow):
         self.pkg_list = QListWidget()
         for p in packager.list_bundleable():
             name = p["name"] if isinstance(p, dict) else str(p)
-            self.pkg_list.addItem(name)
-            self.pkg_list.item(self.pkg_list.count() - 1).setCheckState(Qt.CheckState.Checked)
+            item = QListWidgetItem(name)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Checked)
+            self.pkg_list.addItem(item)
         lay.addWidget(self.pkg_list, 1)
         b = _btn_primary("Create bundle zip")
         b.clicked.connect(self._bundle)

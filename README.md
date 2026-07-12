@@ -1,7 +1,7 @@
 # Lappa
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![Version](https://img.shields.io/badge/version-0.3.0-0E8A16.svg)](packages/server/pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.4.0-0E8A16.svg)](packages/server/pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![ROS2](https://img.shields.io/badge/ROS2-Humble%20%7C%20Jazzy%20%7C%20Rolling-22314E.svg)](https://docs.ros.org/)
 [![MergeOS](https://img.shields.io/badge/MergeOS-bounties-5319E7.svg)](https://github.com/mergeos-bounties)
@@ -23,6 +23,7 @@
 
 - [Highlights](#highlights)
 - [Screenshots](#screenshots)
+- [Desktop GUI (Qt)](#desktop-gui-qt)
 - [Diagrams](#diagrams)
 - [Architecture](#architecture)
 - [Quick start](#quick-start)

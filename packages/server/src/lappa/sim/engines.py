@@ -71,9 +71,22 @@ class BaseEngine:
     def set_cmd(self, linear_x: float = 0.0, linear_y: float = 0.0, angular_z: float = 0.0) -> None:
         self.state.twist = Twist(linear_x, linear_y, angular_z)
 
-    def step(self) -> SimState:
+    def step(self, dt: float | None = None) -> SimState:
+        """Advance simulation.
+
+        ``dt`` is seconds. When omitted, uses wall-clock since last step.
+        On Windows / tight GUI loops the measured delta can be ~0; we floor to
+        1/60s while running so teleop and tests always integrate motion.
+        """
         now = time.monotonic()
-        dt = min(0.1, max(0.0, now - self._last))
+        if dt is None:
+            measured = min(0.1, max(0.0, now - self._last))
+            # Burst ticks (Qt timer + processEvents, unit tests) can yield ~0.
+            if self.state.running and measured < 1e-4:
+                measured = 1.0 / 60.0
+            dt = measured
+        else:
+            dt = min(0.1, max(0.0, float(dt)))
         self._last = now
         if self.state.running:
             self._integrate(dt)
