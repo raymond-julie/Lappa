@@ -67,6 +67,7 @@ DEFAULT_OBSTACLES: list[tuple[float, float, float, float]] = [
     (0.0, -2.2, 0.2, 0.2),  # pillar_center
     (-2.4, -0.5, 0.35, 0.35),  # ramp_block
     (1.8, -1.6, 0.3, 0.2),  # dock_pad
+    (-0.9, 1.8, 0.15, 0.15),  # gate_post
 ]
 
 
