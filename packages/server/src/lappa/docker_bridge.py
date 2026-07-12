@@ -47,6 +47,14 @@ def status() -> dict[str, Any]:
     selected = get_selected()
     distro = selected.get("id", "humble")
     image = f"lappa-ros2:{distro}"
+    launch_hint = {
+        "compose": str(DOCKER_DIR / "docker-compose.yml"),
+        "suggested": [
+            f"docker compose -f {DOCKER_DIR / 'docker-compose.yml'} up --build",
+            f"# ros2 launch after shell: source /opt/ros/{distro}/setup.bash",
+        ],
+        "native_fallback": "lappa sim start --demo diff_drive_2w",
+    }
     if not docker_available():
         return {
             "available": False,
@@ -55,6 +63,7 @@ def status() -> dict[str, Any]:
             "compose_file": str(DOCKER_DIR / "docker-compose.yml"),
             "ros2_distro": distro,
             "image": image,
+            "launch": launch_hint,
         }
     code, out, err = _run(["docker", "info", "--format", "{{json .ServerVersion}}"])
     daemon = code == 0
@@ -72,6 +81,7 @@ def status() -> dict[str, Any]:
         "image": image,
         "ros2_distro": distro,
         "docker_base": selected.get("docker_image"),
+        "launch": launch_hint,
     }
 
 

@@ -15,54 +15,55 @@
       <div class="brand">
         <span class="logo">◆</span>
         <span class="name">Lappa</span>
-        <span class="tag">ROS2 IDE</span>
+        <span class="tag" data-i18n="tag">ROS2 IDE</span>
       </div>
       <div class="toolbar">
         <label class="ros2-select-wrap" title="Target ROS2 distro for Docker + packages">
           <span class="ros2-label">ROS2</span>
           <select id="ros2-version" class="ros2-select"></select>
         </label>
-        <button id="btn-run" class="btn primary" title="Start native sim">▶ Run Sim</button>
-        <button id="btn-stop" class="btn" title="Stop sim">■ Stop</button>
+        <button id="btn-run" class="btn primary" title="Start native sim" data-i18n-title="run">▶ Run Sim</button>
+        <button id="btn-stop" class="btn" title="Stop sim" data-i18n-title="stop">■ Stop</button>
         <button id="btn-hot" class="btn toggle on" title="Toggle hot reload">⚡ Hot Reload</button>
         <button id="btn-docker" class="btn" title="Docker show status">🐳 Docker</button>
+        <button id="btn-lang" class="btn" title="Toggle EN/VI UI strings">VI/EN</button>
         <span id="status-pill" class="pill idle">idle</span>
       </div>
       <div class="title-right">
-        <span id="pkg-label" class="muted">no package</span>
-        <span class="ver">v0.3</span>
+        <span id="pkg-label" class="muted" data-i18n="no_pkg">no package</span>
+        <span class="ver">v0.4</span>
       </div>
     </header>
 
     <div class="main">
       <!-- Activity bar -->
       <nav class="activity">
-        <button class="act on" data-panel="explorer" title="Explorer">📁</button>
-        <button class="act" data-panel="demos" title="Demos">🤖</button>
-        <button class="act" data-panel="sim" title="Sim controls">🎛</button>
-        <button class="act" data-panel="package" title="Package / bundle">📦</button>
-        <button class="act" data-panel="models" title="3D models">🧊</button>
+        <button class="act on" data-panel="explorer" title="Explorer" data-i18n-title="explorer">📁</button>
+        <button class="act" data-panel="demos" title="Demos" data-i18n-title="demos">🤖</button>
+        <button class="act" data-panel="sim" title="Sim controls" data-i18n-title="sim">🎛</button>
+        <button class="act" data-panel="package" title="Package / bundle" data-i18n-title="package">📦</button>
+        <button class="act" data-panel="models" title="3D models" data-i18n-title="models">🧊</button>
         <button class="act" data-panel="docker" title="Docker">🐳</button>
       </nav>
 
       <!-- Side panels -->
       <aside class="sidebar" id="sidebar">
         <section class="panel on" id="panel-explorer">
-          <div class="panel-title">Explorer</div>
+          <div class="panel-title" data-i18n="explorer">Explorer</div>
           <div id="file-tree" class="tree"></div>
         </section>
         <section class="panel" id="panel-demos">
-          <div class="panel-title">Robot demos</div>
+          <div class="panel-title" data-i18n="demos">Robot demos</div>
           <div id="demo-list" class="demo-list"></div>
         </section>
         <section class="panel" id="panel-sim">
-          <div class="panel-title">Teleop</div>
+          <div class="panel-title" data-i18n="teleop">Teleop</div>
           <div class="teleop">
             <label>linear.x <input type="range" id="lx" min="-1" max="1" step="0.05" value="0" /></label>
             <label>linear.y <input type="range" id="ly" min="-1" max="1" step="0.05" value="0" /></label>
             <label>angular.z <input type="range" id="az" min="-1.5" max="1.5" step="0.05" value="0" /></label>
-            <button id="btn-zero" class="btn block">Zero twist</button>
-            <p class="hint">WASD / QE also work when canvas focused</p>
+            <button id="btn-zero" class="btn block" data-i18n="zero">Zero twist</button>
+            <p class="hint" data-i18n="wasd">WASD / QE also work when canvas focused</p>
           </div>
         </section>
         <section class="panel" id="panel-package">

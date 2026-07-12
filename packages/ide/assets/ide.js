@@ -848,3 +848,56 @@ boot().catch((e) => {
   console.error(e);
   log("boot error: " + e.message);
 });
+
+/* --- EN/VI chrome strings --- */
+const I18N = {
+  en: {
+    tag: "ROS2 IDE",
+    run: "Start native sim",
+    stop: "Stop sim",
+    no_pkg: "no package",
+    explorer: "Explorer",
+    demos: "Robot demos",
+    sim: "Sim controls",
+    package: "Package / bundle",
+    models: "3D models",
+    teleop: "Teleop",
+    zero: "Zero twist",
+    wasd: "WASD / QE also work when canvas focused",
+  },
+  vi: {
+    tag: "IDE gói ROS2",
+    run: "Chạy sim offline",
+    stop: "Dừng sim",
+    no_pkg: "chưa chọn gói",
+    explorer: "Thư mục",
+    demos: "Robot demo",
+    sim: "Điều khiển sim",
+    package: "Đóng gói",
+    models: "Mô hình 3D",
+    teleop: "Teleop",
+    zero: "Về 0",
+    wasd: "WASD / QE khi focus canvas",
+  },
+};
+let uiLang = localStorage.getItem("lappa_lang") || "en";
+function applyI18n() {
+  const dict = I18N[uiLang] || I18N.en;
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const k = el.getAttribute("data-i18n");
+    if (dict[k]) el.textContent = dict[k];
+  });
+  document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+    const k = el.getAttribute("data-i18n-title");
+    if (dict[k]) el.title = dict[k];
+  });
+  const btn = document.getElementById("btn-lang");
+  if (btn) btn.textContent = uiLang === "en" ? "VI" : "EN";
+}
+document.getElementById("btn-lang")?.addEventListener("click", () => {
+  uiLang = uiLang === "en" ? "vi" : "en";
+  localStorage.setItem("lappa_lang", uiLang);
+  applyI18n();
+  log("UI language → " + uiLang);
+});
+applyI18n();
