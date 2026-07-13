@@ -2,10 +2,12 @@
 
 ## Claim
 
-1. Star https://github.com/mergeos-bounties/Lappa and https://github.com/mergeos-bounties/mergeos
-2. Comment on the issue: `I claim this bounty`
-3. Claim on MergeOS [issue #1](https://github.com/mergeos-bounties/mergeos/issues/1) with the issue URL
-4. Open a PR to **Lappa** with `Fixes #<n>`
+1. **Follow** the org https://github.com/mergeos-bounties  
+2. **Star** https://github.com/mergeos-bounties/mergeos  
+3. **Star** https://github.com/mergeos-bounties/mergeos-contracts
+4. Comment on the issue: `I claim this bounty`
+5. Claim on MergeOS [issue #1](https://github.com/mergeos-bounties/mergeos/issues/1) with the issue URL
+6. Open a PR to **Lappa** with `Fixes #<n>`
 
 ## Payout scale
 
