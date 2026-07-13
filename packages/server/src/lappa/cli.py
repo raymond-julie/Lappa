@@ -149,6 +149,7 @@ def sim_summary() -> None:
     state = st.get("state") or st
     lidar = state.get("lidar") or []
     joints = state.get("joints") or []
+    traj = st.get("trajectory_stats") or SESSION.trajectory_stats()
     rprint(
         {
             "demo": state.get("demo") or st.get("demo"),
@@ -163,8 +164,15 @@ def sim_summary() -> None:
             "n_lidar": len(lidar),
             "lidar_min": min(lidar) if lidar else None,
             "t": state.get("t"),
+            "trajectory": traj,
         }
     )
+
+
+@sim_app.command("stats")
+def sim_stats() -> None:
+    """Trajectory metrics only (distance, speed, idle, efficiency)."""
+    rprint(SESSION.trajectory_stats())
 
 
 @sim_app.command("trajectory")
