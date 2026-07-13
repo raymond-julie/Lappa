@@ -64,9 +64,12 @@ class SimSession:
     def trajectory_stats(self) -> dict[str, Any]:
         """Summary metrics for the recorded native-sim trajectory."""
         with self._lock:
-            rows = list(self.trajectory)
+            return self.trajectory_stats_unlocked()
+
+    def trajectory_stats_unlocked(self) -> dict[str, Any]:
+        rows = list(self.trajectory)
         if not rows:
-            return {"points": 0, "distance_m": 0.0, "duration_s": 0.0}
+            return {"points": 0, "distance_m": 0.0, "duration_s": 0.0, "avg_speed_mps": 0.0}
         dist = 0.0
         for a, b in zip(rows, rows[1:]):
             dx = float(b.get("x", 0) - a.get("x", 0))
@@ -74,10 +77,13 @@ class SimSession:
             dist += (dx * dx + dy * dy) ** 0.5
         t0 = float(rows[0].get("t", 0))
         t1 = float(rows[-1].get("t", 0))
+        duration = max(0.0, t1 - t0)
+        avg_speed = dist / duration if duration > 1e-6 else 0.0
         return {
             "points": len(rows),
             "distance_m": round(dist, 4),
-            "duration_s": round(max(0.0, t1 - t0), 4),
+            "duration_s": round(duration, 4),
+            "avg_speed_mps": round(avg_speed, 4),
             "demo": rows[-1].get("demo"),
         }
 
@@ -108,6 +114,7 @@ class SimSession:
 
     def status_unlocked(self) -> dict[str, Any]:
         st = self.engine.state.to_dict() if self.engine else {"running": False}
+        traj = self.trajectory_stats_unlocked() if self.trajectory else {"points": 0}
         return {
             "state": st,
             "package": self.package.to_dict() if self.package else None,
@@ -115,6 +122,7 @@ class SimSession:
             "reload_count": self.reload_count,
             "last_reload_at": self.last_reload_at,
             "trajectory_points": len(self.trajectory),
+            "trajectory_stats": traj,
             "logs": self.logs[-40:],
         }
 
