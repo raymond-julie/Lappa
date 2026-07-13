@@ -71,6 +71,7 @@ DEFAULT_OBSTACLES: list[tuple[float, float, float, float]] = [
     (0.5, 0.9, 0.28, 0.28),  # cargo_crate
     (-1.8, -1.5, 0.35, 0.2),  # charging_dock
     (2.2, 1.0, 0.4, 0.15),  # shelf_rack
+    (1.5, 2.0, 0.3, 0.3),  # barrel_stack
 ]
 
 
