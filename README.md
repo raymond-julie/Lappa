@@ -30,7 +30,6 @@
 - [Repository layout](#repository-layout)
 - [Development](#development)
 - [MergeOS bounties](#mergeos-bounties)
-- [Tiếng Việt](#tiếng-việt)
 - [License](#license)
 
 ---
@@ -394,21 +393,6 @@ lappa-gui
 Star → claim a bounty issue → PR to **master** → MRG **25–200**.  
 Evidence for UI bounties: **Qt desktop screenshots** (`lappa-gui`), not the legacy browser shell.  
 See [mergeos](https://github.com/mergeos-bounties/mergeos) and [docs/BOUNTY.md](docs/BOUNTY.md).
-
----
-
-## Tiếng Việt
-
-**Lappa** là IDE gói ROS2: **ứng dụng desktop Qt (PySide6)** là giao diện chính (`lappa-gui`), mô phỏng offline, build robot 3D, đóng gói colcon, Docker ROS2 tùy chọn — **không cần cài ROS2 full trên máy**.
-
-```powershell
-cd packages\server
-pip install -e ".[gui,dev]"
-lappa demo
-lappa-gui
-```
-
-Web/browser IDE cũ chỉ còn tùy chọn; làm product và bounty UI trên **Qt**.
 
 ---
 
