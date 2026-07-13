@@ -75,6 +75,8 @@ class SimSession:
                 "duration_s": 0.0,
                 "avg_speed_mps": 0.0,
                 "max_speed_mps": 0.0,
+                "net_displacement_m": 0.0,
+                "path_efficiency": 0.0,
             }
         dist = 0.0
         max_seg = 0.0
@@ -89,12 +91,18 @@ class SimSession:
         t1 = float(rows[-1].get("t", 0))
         duration = max(0.0, t1 - t0)
         avg_speed = dist / duration if duration > 1e-6 else 0.0
+        ndx = float(rows[-1].get("x", 0) - rows[0].get("x", 0))
+        ndy = float(rows[-1].get("y", 0) - rows[0].get("y", 0))
+        net = (ndx * ndx + ndy * ndy) ** 0.5
+        efficiency = (net / dist) if dist > 1e-9 else 0.0
         return {
             "points": len(rows),
             "distance_m": round(dist, 4),
             "duration_s": round(duration, 4),
             "avg_speed_mps": round(avg_speed, 4),
             "max_speed_mps": round(max_seg, 4),
+            "net_displacement_m": round(net, 4),
+            "path_efficiency": round(efficiency, 4),
             "demo": rows[-1].get("demo"),
         }
 
