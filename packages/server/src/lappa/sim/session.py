@@ -69,12 +69,22 @@ class SimSession:
     def trajectory_stats_unlocked(self) -> dict[str, Any]:
         rows = list(self.trajectory)
         if not rows:
-            return {"points": 0, "distance_m": 0.0, "duration_s": 0.0, "avg_speed_mps": 0.0}
+            return {
+                "points": 0,
+                "distance_m": 0.0,
+                "duration_s": 0.0,
+                "avg_speed_mps": 0.0,
+                "max_speed_mps": 0.0,
+            }
         dist = 0.0
+        max_seg = 0.0
         for a, b in zip(rows, rows[1:]):
             dx = float(b.get("x", 0) - a.get("x", 0))
             dy = float(b.get("y", 0) - a.get("y", 0))
-            dist += (dx * dx + dy * dy) ** 0.5
+            seg = (dx * dx + dy * dy) ** 0.5
+            dt = max(1e-6, float(b.get("t", 0) - a.get("t", 0)))
+            max_seg = max(max_seg, seg / dt)
+            dist += seg
         t0 = float(rows[0].get("t", 0))
         t1 = float(rows[-1].get("t", 0))
         duration = max(0.0, t1 - t0)
@@ -84,6 +94,7 @@ class SimSession:
             "distance_m": round(dist, 4),
             "duration_s": round(duration, 4),
             "avg_speed_mps": round(avg_speed, 4),
+            "max_speed_mps": round(max_seg, 4),
             "demo": rows[-1].get("demo"),
         }
 

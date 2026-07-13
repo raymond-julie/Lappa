@@ -17,6 +17,8 @@ def test_trajectory_stats_after_ticks():
     assert st["points"] >= 5
     assert st["distance_m"] >= 0.0
     assert "avg_speed_mps" in st
+    assert "max_speed_mps" in st
+    assert st["max_speed_mps"] >= 0.0
     status = s.status()
     assert "trajectory_stats" in status
     assert status["trajectory_stats"]["points"] == st["points"]
