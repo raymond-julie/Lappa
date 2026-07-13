@@ -1,5 +1,9 @@
 # Image tag follows selected ROS2 distro (Dockerfile rewritten by Lappa).
 # Default: humble. Switch via IDE title bar or `lappa ros2 set jazzy`.
+#
+# Bridge: packages/demos is bind-mounted at /ws/src so the Lappa IDE
+# (Monaco web or Qt Editor) can open/edit package sources and Docker
+# `ros2 launch` sees the same files without rebuild.
 services:
   lappa-ros2:
     build: .
@@ -7,10 +11,14 @@ services:
     container_name: lappa-ros2
     volumes:
       - ../demos:/ws/src:rw
+      - ./ros2_distro.txt:/ws/ros2_distro.txt:ro
     environment:
       - ROS_DOMAIN_ID=42
+      - ROS_DISTRO=${LAPPA_ROS_DISTRO:-humble}
     stdin_open: true
     tty: true
+    # Keep container up for docker exec launch sessions from IDE/CLI
+    command: ["bash", "-lc", "sleep infinity"]
     # GUI show (optional): enable with VcXsrv / WSLg on Windows
     # environment:
     #   - DISPLAY=host.docker.internal:0.0

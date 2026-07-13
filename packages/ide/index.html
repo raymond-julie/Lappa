@@ -89,10 +89,14 @@
           <p class="hint">Auto-fit AABB → link. Build robot = chassis + wheels + lidar khớp kinematics. View in 3D tab.</p>
         </section>
         <section class="panel" id="panel-docker">
-          <div class="panel-title">Docker show mode</div>
+          <div class="panel-title">Docker · IDE bridge</div>
+          <p class="hint">Package tree you edit mounts at <code>/ws/src</code>. Launch runs <code>sim.launch.py</code> in the container for the active package.</p>
           <pre id="docker-info" class="logbox">Checking…</pre>
           <button id="btn-docker-refresh" class="btn block">Refresh</button>
           <button id="btn-docker-start" class="btn block primary">Start runtime</button>
+          <button id="btn-docker-launch" class="btn block primary">Launch active package in Docker</button>
+          <button id="btn-docker-launch-stop" class="btn block">Stop Docker launch</button>
+          <button id="btn-docker-stop" class="btn block">Stop container</button>
         </section>
       </aside>
 

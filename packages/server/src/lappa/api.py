@@ -241,6 +241,29 @@ def api_docker_stop() -> dict:
     return docker_bridge.stop_runtime()
 
 
+class DockerLaunchBody(BaseModel):
+    demo: str = "diff_drive_2w"
+
+
+@app.post("/api/docker/launch")
+def api_docker_launch(body: DockerLaunchBody) -> dict:
+    """Start ros2 launch for a demo package inside the Docker container.
+
+    Package sources are the same tree the IDE opens/edits (packages/demos).
+    """
+    return docker_bridge.launch_demo(body.demo)
+
+
+@app.post("/api/docker/launch/stop")
+def api_docker_launch_stop() -> dict:
+    return docker_bridge.stop_launch()
+
+
+@app.get("/api/docker/launch")
+def api_docker_launch_status() -> dict:
+    return docker_bridge.launch_status()
+
+
 # --- ROS2 version ---
 @app.get("/api/ros2/versions")
 def api_ros2_versions() -> dict:

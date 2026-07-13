@@ -191,6 +191,30 @@ def docker_show() -> None:
     rprint(docker_bridge.show_info())
 
 
+@docker_app.command("start")
+def docker_start() -> None:
+    """Start Docker runtime (demos mounted at /ws/src for IDE edits)."""
+    rprint(docker_bridge.start_runtime())
+
+
+@docker_app.command("stop")
+def docker_stop() -> None:
+    rprint(docker_bridge.stop_runtime())
+
+
+@docker_app.command("launch")
+def docker_launch(
+    demo: str = typer.Option("diff_drive_2w", "--demo", "-d", help="Demo package name"),
+) -> None:
+    """Launch package sim.launch.py inside Docker (same sources IDE edits)."""
+    rprint(docker_bridge.launch_demo(demo))
+
+
+@docker_app.command("launch-stop")
+def docker_launch_stop() -> None:
+    rprint(docker_bridge.stop_launch())
+
+
 @ros2_app.command("list")
 def ros2_list() -> None:
     table = Table(title="ROS2 versions")

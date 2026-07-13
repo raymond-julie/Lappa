@@ -1,11 +1,11 @@
-"""Lappa modern Qt desktop — sim, demos, 3D, packages."""
+"""Lappa modern Qt desktop — IDE editor, sim, demos, 3D, packages, Docker."""
 
 from __future__ import annotations
 
 import math
 
 from PySide6.QtCore import Qt, QTimer, QPointF
-from PySide6.QtGui import QColor, QPainter, QPen, QBrush, QFont
+from PySide6.QtGui import QColor, QPainter, QPen, QBrush, QFont, QFontDatabase
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QSlider,
     QStackedWidget,
@@ -28,7 +29,7 @@ from PySide6.QtWidgets import (
 from lappa import __version__, docker_bridge, models3d, packager, ros2_versions
 from lappa.config import DEMOS_ROOT, ensure_dirs
 from lappa.gui.styles import STYLESHEET
-from lappa.package_loader import list_demo_packages
+from lappa.package_loader import list_demo_packages, load_package, read_file, write_file
 from lappa.sim.session import SESSION
 
 
@@ -188,8 +189,9 @@ class MainWindow(QMainWindow):
         sl.addSpacing(12)
 
         self._nav: list[QPushButton] = []
-        self._keys = ["sim", "demos", "models", "packages", "ros2"]
+        self._keys = ["editor", "sim", "demos", "models", "packages", "ros2"]
         labels = {
+            "editor": "📝  Editor",
             "sim": "🎛  Simulation",
             "demos": "🤖  Demos",
             "models": "🧊  3D models",
@@ -213,12 +215,16 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         root.addWidget(self.stack, 1)
 
+        self._editor_pkg = None
+        self._editor_rel: str | None = None
+        self.page_editor = self._page_editor()
         self.page_sim = self._page_sim()
         self.page_demos = self._page_demos()
         self.page_models = self._page_models()
         self.page_packages = self._page_packages()
         self.page_ros2 = self._page_ros2()
         for w in (
+            self.page_editor,
             self.page_sim,
             self.page_demos,
             self.page_models,
@@ -228,8 +234,8 @@ class MainWindow(QMainWindow):
             self.stack.addWidget(w)
 
         self.setStatusBar(QStatusBar())
-        self._status("Ready · native sim offline")
-        self._goto("sim")
+        self._status("Ready · open a package in Editor · native sim offline")
+        self._goto("editor")
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick_sim)
@@ -243,6 +249,143 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(idx)
         for i, b in enumerate(self._nav):
             b.setChecked(i == idx)
+
+    def _page_editor(self) -> QWidget:
+        """Package IDE: open demo sources, edit, save — same tree Docker mounts."""
+        page = QWidget()
+        lay = QHBoxLayout(page)
+        lay.setContentsMargins(16, 16, 16, 16)
+
+        left = QVBoxLayout()
+        title = QLabel("Package editor")
+        title.setStyleSheet("font-size: 18px; font-weight: 700;")
+        left.addWidget(title)
+        hint = QLabel(
+            "Open package sources here. Docker launch mounts packages/demos → /ws/src."
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #8b949e;")
+        left.addWidget(hint)
+
+        self.ed_pkg_combo = QComboBox()
+        for p in list_demo_packages(DEMOS_ROOT):
+            self.ed_pkg_combo.addItem(p.name)
+        self.ed_pkg_combo.currentTextChanged.connect(self._editor_load_package)
+        left.addWidget(self.ed_pkg_combo)
+
+        self.ed_file_list = QListWidget()
+        self.ed_file_list.itemClicked.connect(self._editor_open_file)
+        left.addWidget(self.ed_file_list, 1)
+
+        brow = QHBoxLayout()
+        b_save = _btn_primary("💾 Save")
+        b_save.clicked.connect(self._editor_save)
+        b_reload = _btn_ghost("Reload file")
+        b_reload.clicked.connect(self._editor_reload)
+        b_docker = _btn_ghost("▶ Docker launch")
+        b_docker.clicked.connect(self._editor_docker_launch)
+        brow.addWidget(b_save)
+        brow.addWidget(b_reload)
+        brow.addWidget(b_docker)
+        left.addLayout(brow)
+        lay.addLayout(left, 1)
+
+        right = QVBoxLayout()
+        self.ed_path_label = QLabel("No file open")
+        self.ed_path_label.setStyleSheet("color: #58a6ff; font-family: Consolas, monospace;")
+        right.addWidget(self.ed_path_label)
+        self.ed_text = QPlainTextEdit()
+        mono = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
+        mono.setPointSize(11)
+        self.ed_text.setFont(mono)
+        self.ed_text.setStyleSheet(
+            "QPlainTextEdit { background: #0d1117; color: #e6edf3; "
+            "border: 1px solid #30363d; border-radius: 8px; padding: 8px; }"
+        )
+        right.addWidget(self.ed_text, 1)
+        lay.addLayout(right, 3)
+
+        if self.ed_pkg_combo.count():
+            self._editor_load_package(self.ed_pkg_combo.currentText())
+        return page
+
+    def _editor_load_package(self, name: str) -> None:
+        name = (name or "").strip()
+        if not name:
+            return
+        path = DEMOS_ROOT / name
+        if not path.is_dir():
+            return
+        self._editor_pkg = load_package(path)
+        self._editor_rel = None
+        self.ed_file_list.clear()
+        for f in self._editor_pkg.files:
+            self.ed_file_list.addItem(f)
+        self.ed_path_label.setText(f"{name}/ — {len(self._editor_pkg.files)} files")
+        self.ed_text.clear()
+        # Prefer teleop / package.xml
+        prefer = next(
+            (f for f in self._editor_pkg.files if f.endswith("teleop.py")),
+            None,
+        ) or next((f for f in self._editor_pkg.files if f == "package.xml"), None)
+        if prefer:
+            matches = self.ed_file_list.findItems(prefer, Qt.MatchFlag.MatchExactly)
+            if matches:
+                self.ed_file_list.setCurrentItem(matches[0])
+                self._editor_open_file(matches[0])
+
+    def _editor_open_file(self, item: QListWidgetItem) -> None:
+        if not self._editor_pkg or item is None:
+            return
+        rel = item.text()
+        try:
+            text = read_file(self._editor_pkg, rel)
+            self._editor_rel = rel
+            self.ed_text.setPlainText(text)
+            self.ed_path_label.setText(f"{self._editor_pkg.name}/{rel}")
+            self._status(f"Opened {rel}")
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Open failed", str(exc))
+
+    def _editor_reload(self) -> None:
+        if self._editor_rel and self.ed_file_list.currentItem():
+            self._editor_open_file(self.ed_file_list.currentItem())
+
+    def _editor_save(self) -> None:
+        if not self._editor_pkg or not self._editor_rel:
+            QMessageBox.information(self, "Save", "Open a file first.")
+            return
+        try:
+            write_file(self._editor_pkg, self._editor_rel, self.ed_text.toPlainText())
+            self._status(f"Saved {self._editor_pkg.name}/{self._editor_rel}")
+            # Notify native sim hot-reload if running same package
+            SESSION.notify_file_change(self._editor_rel)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Save failed", str(exc))
+
+    def _editor_docker_launch(self) -> None:
+        demo = self.ed_pkg_combo.currentText() or "diff_drive_2w"
+        try:
+            r = docker_bridge.launch_demo(demo)
+            msg = r.get("message") or r.get("error") or str(r)
+            self._status(msg[:120])
+            if not r.get("ok"):
+                QMessageBox.information(
+                    self,
+                    "Docker launch",
+                    f"{msg}\n\nFallback: use Simulation page (native) or "
+                    f"`lappa sim start --demo {demo}`",
+                )
+            else:
+                QMessageBox.information(
+                    self,
+                    "Docker launch",
+                    f"Launched {demo} in container.\n"
+                    f"{r.get('launch_path')}\n\n"
+                    "Package sources are the files you edit in this IDE.",
+                )
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Docker launch", str(exc))
 
     def _page_sim(self) -> QWidget:
         page = QWidget()
@@ -483,6 +626,30 @@ class MainWindow(QMainWindow):
         b = _btn_primary("Apply ROS2 version")
         b.clicked.connect(self._set_ros2)
         lay.addWidget(b, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        drow = QHBoxLayout()
+        b_up = _btn_primary("▶ Start Docker runtime")
+        b_up.clicked.connect(self._docker_start)
+        b_launch = _btn_ghost("Launch sim in Docker")
+        b_launch.clicked.connect(self._docker_launch_active)
+        b_stop_l = _btn_ghost("Stop launch")
+        b_stop_l.clicked.connect(self._docker_stop_launch)
+        b_down = _btn_ghost("Stop Docker")
+        b_down.clicked.connect(self._docker_stop)
+        drow.addWidget(b_up)
+        drow.addWidget(b_launch)
+        drow.addWidget(b_stop_l)
+        drow.addWidget(b_down)
+        lay.addLayout(drow)
+
+        bridge = QLabel(
+            "Bridge: Editor saves write packages/demos → container /ws/src. "
+            "Native Simulation stays available offline without Docker."
+        )
+        bridge.setWordWrap(True)
+        bridge.setStyleSheet("color: #8b949e; margin: 8px 0;")
+        lay.addWidget(bridge)
+
         self.docker_info = QTextEdit()
         self.docker_info.setReadOnly(True)
         lay.addWidget(self.docker_info, 1)
@@ -491,6 +658,44 @@ class MainWindow(QMainWindow):
         lay.addWidget(b2, alignment=Qt.AlignmentFlag.AlignLeft)
         self._refresh_docker()
         return page
+
+    def _docker_start(self) -> None:
+        try:
+            r = docker_bridge.start_runtime()
+            self.docker_info.setPlainText(str(r))
+            self._status("Docker runtime " + ("ok" if r.get("ok") else "failed"))
+        except Exception as exc:  # noqa: BLE001
+            self.docker_info.setPlainText(str(exc))
+
+    def _docker_stop(self) -> None:
+        try:
+            r = docker_bridge.stop_runtime()
+            self.docker_info.setPlainText(str(r))
+            self._status("Docker stopped")
+        except Exception as exc:  # noqa: BLE001
+            self.docker_info.setPlainText(str(exc))
+
+    def _docker_launch_active(self) -> None:
+        demo = (
+            self.ed_pkg_combo.currentText()
+            if hasattr(self, "ed_pkg_combo")
+            else None
+        ) or (self.demo_combo.currentText() if hasattr(self, "demo_combo") else None)
+        demo = demo or "diff_drive_2w"
+        try:
+            r = docker_bridge.launch_demo(demo)
+            self.docker_info.setPlainText(str(r))
+            self._status(f"Docker launch {demo}: {'ok' if r.get('ok') else 'fail'}")
+        except Exception as exc:  # noqa: BLE001
+            self.docker_info.setPlainText(str(exc))
+
+    def _docker_stop_launch(self) -> None:
+        try:
+            r = docker_bridge.stop_launch()
+            self.docker_info.setPlainText(str(r))
+            self._status("Docker launch stopped")
+        except Exception as exc:  # noqa: BLE001
+            self.docker_info.setPlainText(str(exc))
 
     def _set_ros2(self) -> None:
         distro = self.ros2_combo.currentData()

@@ -1,15 +1,21 @@
 # Lappa
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![Version](https://img.shields.io/badge/version-0.4.13-0E8A16.svg)](packages/server/pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.4.20-0E8A16.svg)](packages/server/pyproject.toml)
 [![GUI-PySide6](https://img.shields.io/badge/GUI-PySide6-41CD52.svg)](packages/server/src/lappa/gui/)
 [![ROS2](https://img.shields.io/badge/ROS2-Humble%20%7C%20Jazzy%20%7C%20Rolling-22314E.svg)](https://docs.ros.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![MergeOS](https://img.shields.io/badge/MergeOS-bounties-5319E7.svg)](https://github.com/mergeos-bounties)
 
-**Lappa** is a **ROS2 package IDE** for Windows-first (and Linux) workflows: open a demo package, **simulate offline** in a native **Qt (PySide6)** desktop app, build **fitted multi-link 3D robots**, bundle colcon zips, and optionally run a real ROS2 container — **without installing a full ROS2 desktop on the host**.
+**Lappa** is a **ROS2 package IDE**: **open and edit** package sources (Explorer + Monaco web IDE, or **Qt Editor**), run **offline native simulation**, and optionally **launch the same package in Docker** (`ros2 launch`) so edits mount live into the container — **without installing a full ROS2 desktop on the host**.
 
-**Primary UI:** native desktop **`lappa-gui`** (not the old browser shell).  
+| Surface | Role |
+| --- | --- |
+| **Web IDE** (`lappa serve`) | Primary code editor (Monaco), file tree, sim canvas, Docker launch |
+| **Qt desktop** (`lappa-gui`) | Editor page + Simulation + Docker bridge controls |
+| **Native sim** | Offline kinematics when Docker is unavailable |
+| **Docker** | Real ROS2 distro; `packages/demos` → `/ws/src` for IDE↔container bridge |
+
 **Product:** [mergeos-bounties/Lappa](https://github.com/mergeos-bounties/Lappa)
 
 ---
@@ -38,14 +44,15 @@
 
 | Capability | What you get |
 | --- | --- |
-| **Qt desktop (primary)** | `lappa-gui` — Simulation, Demos, 3D models, Packages, ROS2/Docker |
+| **Package IDE (open/edit)** | Monaco web Explorer **or** Qt **Editor** — open demo tree, edit, Ctrl+S / Save |
+| **IDE ↔ Docker bridge** | `lappa docker launch --demo <pkg>` runs `sim.launch.py` on mounted sources |
 | **Offline native sim** | Diff-drive, omni, tricycle, ackermann, planar arm — pose, twist, lidar, joints |
 | **Lidar obstacles** | Default obstacle map for denser synthetic scans |
 | **3D mesh fit** | Procedural OBJ library + AABB fit + multi-link `build-robot` |
-| **No host ROS2 required** | Demos run without ROS2 desktop on Windows/Linux |
-| **Multi-distro targets** | Humble · Iron · Jazzy · Kilted · Rolling (Docker rewrite) |
+| **No host ROS2 required** | Demos + editor work without ROS2 desktop; Docker optional |
+| **Multi-distro targets** | Humble · Iron · Jazzy · Kilted · Rolling (Dockerfile rewrite) |
 | **Package bundler** | Zip packages with `lappa_manifest.json` for colcon |
-| **CLI + optional API** | `lappa` Typer CLI; FastAPI for automation when needed |
+| **CLI + API** | `lappa` Typer CLI; FastAPI for IDE automation |
 
 ---
 
@@ -66,11 +73,27 @@ lappa gui
 
 | Nav page | Purpose |
 | --- | --- |
-| **Simulation** | Start/stop native sim, teleop, 2D canvas + lidar, trajectory |
+| **Editor** | **Open package files, edit, save** — same tree Docker mounts at `/ws/src` |
+| **Simulation** | Start/stop **native** sim, teleop, 2D canvas + lidar, trajectory |
 | **Demos** | Pick `diff_drive_2w`, `omni_3w`, `tricycle_3w`, `ackermann_4w`, `simple_arm` |
 | **3D models** | Build aligned multi-link robot meshes for a demo package |
 | **Packages** | List / create colcon-ready zip bundles |
-| **ROS2 / Docker** | Select distro, Docker status |
+| **ROS2 / Docker** | Distro select, start container, **launch package sim in Docker** |
+
+### Web IDE (Monaco) — code first
+
+```powershell
+cd packages\server
+pip install -e ".[dev]"
+lappa serve --port 8840
+# open http://127.0.0.1:8840 — Explorer opens package files in Monaco
+```
+
+| Action | What happens |
+| --- | --- |
+| Click a demo | Opens package tree + editor + native sim |
+| Edit + Ctrl+S | Writes file under `packages/demos/…` (hot-reload) |
+| Docker → **Launch active package** | `ros2 launch` in container on that package |
 
 <p align="center">
   <img src="docs/screenshots/gui-sim.png" alt="Lappa GUI — Simulation" width="100%" />
@@ -95,9 +118,7 @@ lappa gui
 <p align="center">
   <img src="docs/screenshots/gui-ros2.png" alt="Lappa GUI — ROS2" width="100%" />
 </p>
-<p align="center"><em>ROS2 distro & Docker status</em></p>
-
-> **Note:** An older browser IDE (`lappa serve` / `lappa desktop`) may still start for API demos and legacy screenshots. **New work targets `lappa-gui`.** Prefer Qt for all product UX and bounty evidence.
+<p align="center"><em>ROS2 distro & Docker bridge</em></p>
 
 ---
 
@@ -288,20 +309,34 @@ Base URL when you intentionally run `lappa serve`: `http://127.0.0.1:8840`
 | `POST` | `/api/models/build-robot` | Full aligned robot |
 | `GET` | `/api/packages/{pkg}/scene3d` | 3D scene graph |
 | `GET` | `/api/docker/status` | Docker probe |
+| `POST` | `/api/docker/start` | Start container (demos → `/ws/src`) |
+| `POST` | `/api/docker/launch` | `ros2 launch` active demo in container |
+| `POST` | `/api/docker/launch/stop` | Stop launch processes |
+| `GET`/`PUT` | `/api/files` | Open / save package files (IDE) |
 
-Prefer **CLI + Qt** for interactive work; API is for automation and tests.
+Prefer **web IDE / Qt Editor** for day-to-day package work; API powers both.
 
 ---
 
-## Docker (optional)
+## Docker (optional) · IDE bridge
 
 Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or a Docker engine on Linux).
 
+**Flow:** edit package in IDE → start container → launch that package:
+
 ```powershell
-docker compose -f packages/docker/docker-compose.yml up --build
+lappa docker start
+lappa docker launch --demo diff_drive_2w
+lappa docker launch-stop
+lappa docker stop
 ```
 
-Without Docker, the **native kinematics sim** still runs fully offline. Docker is for real `ros2 launch` / distro fidelity.
+```powershell
+# manual compose (same mount)
+docker compose -f packages/docker/docker-compose.yml up --build -d
+```
+
+Without Docker, the **native kinematics sim** still runs fully offline. Docker runs real `ros2 launch` on the **same `packages/demos` tree the IDE opens**.
 
 ---
 

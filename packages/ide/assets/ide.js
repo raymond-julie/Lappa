@@ -861,7 +861,7 @@ function wireUi() {
   document.getElementById("btn-docker").onclick = refreshDocker;
   document.getElementById("btn-docker-refresh").onclick = refreshDocker;
   document.getElementById("btn-docker-start").onclick = async () => {
-    log("starting docker runtime…");
+    log("starting docker runtime (demos → /ws/src for IDE edits)…");
     try {
       const r = await api("/api/docker/start", { method: "POST" });
       log(JSON.stringify(r).slice(0, 400));
@@ -871,6 +871,57 @@ function wireUi() {
       log("docker start: " + e.message);
     }
   };
+  const btnLaunch = document.getElementById("btn-docker-launch");
+  if (btnLaunch) {
+    btnLaunch.onclick = async () => {
+      const demo = (activePkg && activePkg.name) || (demos[0] && demos[0].name) || "diff_drive_2w";
+      log("docker launch " + demo + " (same sources as Monaco editor)…");
+      try {
+        const r = await api("/api/docker/launch", {
+          method: "POST",
+          body: JSON.stringify({ demo }),
+        });
+        log(r.message || JSON.stringify(r).slice(0, 400));
+        if (r.ok) {
+          setPill("docker-launch", "docker");
+          const meta = document.getElementById("sim-meta");
+          if (meta) meta.textContent = "docker · " + demo;
+        } else {
+          log("fallback: keep native sim running offline");
+        }
+        await refreshDocker();
+      } catch (e) {
+        log("docker launch: " + e.message);
+      }
+    };
+  }
+  const btnLaunchStop = document.getElementById("btn-docker-launch-stop");
+  if (btnLaunchStop) {
+    btnLaunchStop.onclick = async () => {
+      try {
+        const r = await api("/api/docker/launch/stop", { method: "POST" });
+        log("docker launch stop: " + JSON.stringify(r).slice(0, 200));
+        const meta = document.getElementById("sim-meta");
+        if (meta) meta.textContent = "native";
+        await refreshDocker();
+      } catch (e) {
+        log("docker launch stop: " + e.message);
+      }
+    };
+  }
+  const btnDockerStop = document.getElementById("btn-docker-stop");
+  if (btnDockerStop) {
+    btnDockerStop.onclick = async () => {
+      try {
+        const r = await api("/api/docker/stop", { method: "POST" });
+        log("docker stop: " + JSON.stringify(r).slice(0, 200));
+        setPill("idle", "idle");
+        await refreshDocker();
+      } catch (e) {
+        log("docker stop: " + e.message);
+      }
+    };
+  }
 
   const canvas = document.getElementById("viewport");
   canvas.addEventListener("keydown", (e) => {
