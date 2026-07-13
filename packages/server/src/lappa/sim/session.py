@@ -77,9 +77,11 @@ class SimSession:
                 "max_speed_mps": 0.0,
                 "net_displacement_m": 0.0,
                 "path_efficiency": 0.0,
+                "idle_time_s": 0.0,
             }
         dist = 0.0
         max_seg = 0.0
+        idle = 0.0
         for a, b in zip(rows, rows[1:]):
             dx = float(b.get("x", 0) - a.get("x", 0))
             dy = float(b.get("y", 0) - a.get("y", 0))
@@ -87,6 +89,9 @@ class SimSession:
             dt = max(1e-6, float(b.get("t", 0) - a.get("t", 0)))
             max_seg = max(max_seg, seg / dt)
             dist += seg
+            # count time with near-zero motion as idle
+            if seg / dt < 0.02:
+                idle += dt
         t0 = float(rows[0].get("t", 0))
         t1 = float(rows[-1].get("t", 0))
         duration = max(0.0, t1 - t0)
@@ -103,6 +108,7 @@ class SimSession:
             "max_speed_mps": round(max_seg, 4),
             "net_displacement_m": round(net, 4),
             "path_efficiency": round(efficiency, 4),
+            "idle_time_s": round(idle, 4),
             "demo": rows[-1].get("demo"),
         }
 

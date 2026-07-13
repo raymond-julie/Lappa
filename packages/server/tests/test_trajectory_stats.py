@@ -23,6 +23,8 @@ def test_trajectory_stats_after_ticks():
     assert st["net_displacement_m"] >= 0.0
     assert "path_efficiency" in st
     assert 0.0 <= st["path_efficiency"] <= 1.0 + 1e-6
+    assert "idle_time_s" in st
+    assert st["idle_time_s"] >= 0.0
     status = s.status()
     assert "trajectory_stats" in status
     assert status["trajectory_stats"]["points"] == st["points"]
