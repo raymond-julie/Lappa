@@ -61,7 +61,28 @@ class SimSession:
             self.engine.set_cmd(linear_x, linear_y, angular_z)
             return {"ok": True, "twist": self.engine.state.twist.__dict__}
 
+    def trajectory_stats(self) -> dict[str, Any]:
+        """Summary metrics for the recorded native-sim trajectory."""
+        with self._lock:
+            rows = list(self.trajectory)
+        if not rows:
+            return {"points": 0, "distance_m": 0.0, "duration_s": 0.0}
+        dist = 0.0
+        for a, b in zip(rows, rows[1:]):
+            dx = float(b.get("x", 0) - a.get("x", 0))
+            dy = float(b.get("y", 0) - a.get("y", 0))
+            dist += (dx * dx + dy * dy) ** 0.5
+        t0 = float(rows[0].get("t", 0))
+        t1 = float(rows[-1].get("t", 0))
+        return {
+            "points": len(rows),
+            "distance_m": round(dist, 4),
+            "duration_s": round(max(0.0, t1 - t0), 4),
+            "demo": rows[-1].get("demo"),
+        }
+
     def tick(self) -> dict[str, Any]:
+
         with self._lock:
             if not self.engine:
                 return {"running": False}
