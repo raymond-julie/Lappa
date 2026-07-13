@@ -37,10 +37,21 @@ def test_status_includes_session():
     assert "native_fallback" in st["launch"]
 
 
-def test_show_info_mentions_ide_bridge():
+def test_show_info_mentions_ros2_colcon_pipeline():
     info = docker_bridge.show_info()
     steps = " ".join(info.get("steps") or [])
-    assert "IDE" in steps or "edit" in steps.lower()
+    assert "colcon" in steps.lower() or "ros2 launch" in steps.lower()
+    assert "ROS2" in steps or "ros2" in steps.lower()
+
+
+def test_dockerfile_includes_colcon_and_rclpy():
+    from lappa.ros2_versions import dockerfile_for
+
+    df = dockerfile_for("humble")
+    assert "colcon" in df
+    assert "rclpy" in df
+    assert "ros:humble" in df
+    assert "ros2_ws.sh" in df
 
 
 def test_stop_launch_without_docker_ok():

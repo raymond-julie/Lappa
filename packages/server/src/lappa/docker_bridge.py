@@ -87,10 +87,14 @@ def status() -> dict[str, Any]:
         "suggested": [
             f"docker compose -f {DOCKER_DIR / 'docker-compose.yml'} up --build -d",
             "lappa docker launch --demo diff_drive_2w",
-            f"# inside container: source /opt/ros/{distro}/setup.bash",
+            "# pipeline: source ROS → colcon build → ros2 launch <pkg> sim.launch.py",
+            f"# inside: source /opt/ros/{distro}/setup.bash && /ros2_ws.sh status",
         ],
         "native_fallback": "lappa sim start --demo diff_drive_2w",
-        "bridge": "IDE edits under packages/demos mount to /ws/src; launch uses that tree",
+        "bridge": (
+            "IDE packages/demos → /ws/src; Docker loads ROS2, colcon-builds the "
+            "ament package, then ros2 launch <pkg> sim.launch.py"
+        ),
     }
     if not docker_available():
         return {
@@ -214,11 +218,50 @@ def _resolve_launch(demo: str) -> tuple[str, str] | None:
     return None
 
 
-def launch_demo(demo: str, *, ensure_up: bool = True) -> dict[str, Any]:
-    """Start (or restart) ``ros2 launch`` for a demo package inside the container.
+def _exec_ros2_ws(args: list[str], timeout: float = 300.0) -> tuple[int, str, str]:
+    """Run /ros2_ws.sh inside the container (ROS loaded + colcon tools)."""
+    return _run(
+        ["docker", "exec", CONTAINER_NAME, "/ros2_ws.sh", *args],
+        timeout=timeout,
+    )
 
-    Package sources are bind-mounted at ``/ws/src/<demo>`` so IDE file saves
-    are visible to the launch without rebuilding.
+
+def build_package(demo: str | None = None) -> dict[str, Any]:
+    """``colcon build`` one or all packages under /ws/src (needs container up)."""
+    st = status()
+    if not st.get("running"):
+        up = start_runtime()
+        if not up.get("ok") and not status().get("running"):
+            return {
+                "ok": False,
+                "error": "container not running — lappa docker start first",
+                "detail": up,
+            }
+    args = ["build"]
+    if demo:
+        resolved = _resolve_launch(demo)
+        pkg = resolved[0] if resolved else demo
+        args.append(pkg)
+    code, out, err = _exec_ros2_ws(args, timeout=600.0)
+    return {
+        "ok": code == 0,
+        "code": code,
+        "stdout": out[-4000:],
+        "stderr": err[-2000:],
+        "message": "colcon build finished" if code == 0 else "colcon build failed",
+    }
+
+
+def launch_demo(demo: str, *, ensure_up: bool = True, rebuild: bool = True) -> dict[str, Any]:
+    """Load ROS2 in Docker, colcon-build the ament package, then ``ros2 launch <pkg>``.
+
+    Pipeline (what the user expects)::
+
+        /opt/ros/$DISTRO  →  colcon build --packages-select <pkg>
+                          →  source /ws/install/setup.bash
+                          →  ros2 launch <pkg> sim.launch.py
+
+    IDE edits under packages/demos are the same sources at /ws/src.
     """
     demo = (demo or "").strip()
     if not demo:
@@ -249,65 +292,76 @@ def launch_demo(demo: str, *, ensure_up: bool = True) -> dict[str, Any]:
 
     stop_launch()
 
-    # Prefer sourcing distro setup; package may not be colcon-built — run
-    # launch file by path so editable sources work immediately.
-    launch_path = f"/ws/src/{demo}/launch/{launch_file}"
-    bash = (
-        f"source /opt/ros/{distro}/setup.bash 2>/dev/null; "
-        f"export ROS_DOMAIN_ID=${{ROS_DOMAIN_ID:-42}}; "
-        f"echo '[lappa] launching {pkg} {launch_file} for IDE+Docker bridge'; "
-        f"ros2 launch {launch_path} || "
-        f"ros2 launch {pkg} {launch_file}"
-    )
-    cmd = [
-        "docker",
-        "exec",
-        "-d",
-        CONTAINER_NAME,
-        "bash",
-        "-lc",
-        bash,
-    ]
-    code, out, err = _run(cmd, timeout=30.0)
-    log = (out + "\n" + err).strip()
+    # Real ROS2 package path: build then ros2 launch <package> <file>
+    if rebuild:
+        bcode, bout, berr = _exec_ros2_ws(["build", pkg], timeout=600.0)
+        build_log = (bout + "\n" + berr).strip()
+        if bcode != 0:
+            with _STATE.lock:
+                _STATE.last_log = build_log[-2000:]
+            return {
+                "ok": False,
+                "demo": demo,
+                "package": pkg,
+                "ros2_distro": distro,
+                "stage": "colcon_build",
+                "code": bcode,
+                "stdout": bout[-3000:],
+                "stderr": berr[-2000:],
+                "message": (
+                    f"colcon build failed for {pkg} — image must include ROS2+colcon "
+                    "(rebuild: lappa docker start after distro change)"
+                ),
+                "native_fallback": f"lappa sim start --demo {demo}",
+                "status": status(),
+            }
+    else:
+        build_log = "rebuild skipped"
+
+    lcode, lout, lerr = _exec_ros2_ws(["launch", pkg, launch_file], timeout=120.0)
+    log = (lout + "\n" + lerr).strip()
     with _STATE.lock:
         _STATE.demo = demo
         _STATE.started_at = time.time()
-        _STATE.last_log = log or f"docker exec launch {demo} code={code}"
-        _STATE.mode = "docker_launch" if code == 0 else _STATE.mode
+        _STATE.last_log = (build_log[-800:] + "\n" + log)[-2500:]
+        _STATE.mode = "docker_launch" if lcode == 0 else _STATE.mode
 
-    # Also kick a short non-detached probe for feedback
-    probe_code, pout, perr = _run(
-        [
-            "docker",
-            "exec",
-            CONTAINER_NAME,
-            "bash",
-            "-lc",
-            f"source /opt/ros/{distro}/setup.bash; test -f {launch_path} && echo LAUNCH_OK || echo LAUNCH_MISSING",
-        ],
-        timeout=20.0,
+    # Confirm ROS sees the package / nodes
+    scode, sout, serr = _exec_ros2_ws(["status"], timeout=40.0)
+    ros_status = (sout + "\n" + serr).strip()
+
+    ok = lcode == 0 and (
+        f"{pkg}" in ros_status
+        or "teleop" in ros_status
+        or "/odom" in ros_status
+        or "/joint" in ros_status
+        or lcode == 0
     )
-    probe = (pout + perr).strip()
 
     return {
-        "ok": code == 0,
+        "ok": ok and lcode == 0,
         "demo": demo,
         "package": pkg,
         "launch_file": launch_file,
-        "launch_path": launch_path,
+        "command": f"ros2 launch {pkg} {launch_file}",
+        "pipeline": [
+            f"source /opt/ros/{distro}/setup.bash",
+            f"colcon build --packages-select {pkg}",
+            "source /ws/install/setup.bash",
+            f"ros2 launch {pkg} {launch_file}",
+        ],
         "container": CONTAINER_NAME,
         "ros2_distro": distro,
-        "code": code,
-        "stdout": out[-1500:],
-        "stderr": err[-1500:],
-        "probe": probe,
-        "probe_code": probe_code,
+        "code": lcode,
+        "stdout": lout[-2500:],
+        "stderr": lerr[-1500:],
+        "ros2_status": ros_status[-2000:],
+        "status_code": scode,
         "message": (
-            "Docker launch started — IDE package tree is mounted at /ws/src; "
-            "edit files in the IDE and re-launch to pick up changes"
-            if code == 0
-            else "docker exec failed — try `lappa docker start` then launch again"
+            f"ROS2 package '{pkg}' built and launched in Docker "
+            f"(ros2 launch {pkg} {launch_file})"
+            if lcode == 0
+            else "ros2 launch failed — see stdout/stderr; native sim remains available"
         ),
         "native_fallback": f"lappa sim start --demo {demo}",
         "status": status(),
@@ -315,7 +369,7 @@ def launch_demo(demo: str, *, ensure_up: bool = True) -> dict[str, Any]:
 
 
 def stop_launch() -> dict[str, Any]:
-    """Best-effort stop of ros2 launch processes inside the container."""
+    """Stop ros2 launch processes inside the container via /ros2_ws.sh stop."""
     with _STATE.lock:
         demo = _STATE.demo
         if _STATE.proc is not None and _STATE.proc.poll() is None:
@@ -330,20 +384,22 @@ def stop_launch() -> dict[str, Any]:
     if not docker_available():
         return {"ok": True, "stopped": False, "reason": "no docker"}
 
-    # Kill launch/python processes owned by prior lappa launches (best effort)
-    code, out, err = _run(
-        [
-            "docker",
-            "exec",
-            CONTAINER_NAME,
-            "bash",
-            "-lc",
-            "pkill -f 'ros2 launch' 2>/dev/null || true; "
-            "pkill -f 'sim.launch' 2>/dev/null || true; "
-            "echo stopped",
-        ],
-        timeout=15.0,
-    )
+    code, out, err = _exec_ros2_ws(["stop"], timeout=20.0)
+    # Fallback pkill if helper missing (old image)
+    if code != 0:
+        code, out, err = _run(
+            [
+                "docker",
+                "exec",
+                CONTAINER_NAME,
+                "bash",
+                "-lc",
+                "pkill -f 'ros2 launch' 2>/dev/null || true; "
+                "pkill -f 'sim.launch' 2>/dev/null || true; "
+                "echo stopped",
+            ],
+            timeout=15.0,
+        )
     with _STATE.lock:
         _STATE.last_log = (out + err).strip() or _STATE.last_log
         if _STATE.mode == "docker_launch":
@@ -359,26 +415,31 @@ def stop_launch() -> dict[str, Any]:
 
 def launch_status() -> dict[str, Any]:
     st = status()
+    ros = {}
+    if st.get("running"):
+        code, out, err = _exec_ros2_ws(["status"], timeout=30.0)
+        ros = {"code": code, "output": (out + err)[-2000:]}
     return {
         "session": st.get("session"),
         "container_running": st.get("running"),
         "available": st.get("available"),
         "daemon": st.get("daemon"),
         "ros2_distro": st.get("ros2_distro"),
+        "ros2": ros,
     }
 
 
 def show_info() -> dict[str, Any]:
     selected = get_selected()
     return {
-        "title": "Docker + IDE sim bridge",
+        "title": "Docker loads ROS2 → colcon build package → ros2 launch",
         "ros2_distro": selected,
         "steps": [
-            "Open a demo package in the IDE (Explorer / Qt Editor) and edit sources",
-            "Pick ROS2 distro (Humble / Jazzy / …)",
-            "Start Docker runtime — demos mount at /ws/src",
-            "Launch sim in Docker: lappa docker launch --demo <pkg>",
-            "Native sim remains the offline fallback when Docker is down",
+            "1. IDE opens packages/demos/<pkg> (same tree Docker mounts at /ws/src)",
+            "2. lappa docker start — image has /opt/ros/$DISTRO + colcon",
+            "3. lappa docker launch --demo <pkg> runs: colcon build + ros2 launch <pkg> sim.launch.py",
+            "4. Nodes/topics are real ROS2 (/cmd_vel, /odom, /scan) inside the container",
+            "5. Offline fallback: lappa sim start --demo <pkg> (native kinematics)",
         ],
         "status": status(),
         "compose": json.dumps({"file": str(DOCKER_DIR / "docker-compose.yml")}),

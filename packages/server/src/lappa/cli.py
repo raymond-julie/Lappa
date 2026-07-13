@@ -202,12 +202,26 @@ def docker_stop() -> None:
     rprint(docker_bridge.stop_runtime())
 
 
+@docker_app.command("build")
+def docker_build(
+    demo: str = typer.Option(
+        "",
+        "--demo",
+        "-d",
+        help="Package to colcon-build (empty = all under /ws/src)",
+    ),
+) -> None:
+    """colcon build ROS2 package(s) inside the container."""
+    rprint(docker_bridge.build_package(demo or None))
+
+
 @docker_app.command("launch")
 def docker_launch(
     demo: str = typer.Option("diff_drive_2w", "--demo", "-d", help="Demo package name"),
+    no_rebuild: bool = typer.Option(False, "--no-rebuild", help="Skip colcon build"),
 ) -> None:
-    """Launch package sim.launch.py inside Docker (same sources IDE edits)."""
-    rprint(docker_bridge.launch_demo(demo))
+    """Load ROS2, colcon-build package, ros2 launch <pkg> sim.launch.py."""
+    rprint(docker_bridge.launch_demo(demo, rebuild=not no_rebuild))
 
 
 @docker_app.command("launch-stop")

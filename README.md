@@ -1,7 +1,7 @@
 # Lappa
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![Version](https://img.shields.io/badge/version-0.4.20-0E8A16.svg)](packages/server/pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.4.21-0E8A16.svg)](packages/server/pyproject.toml)
 [![GUI-PySide6](https://img.shields.io/badge/GUI-PySide6-41CD52.svg)](packages/server/src/lappa/gui/)
 [![ROS2](https://img.shields.io/badge/ROS2-Humble%20%7C%20Jazzy%20%7C%20Rolling-22314E.svg)](https://docs.ros.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -318,25 +318,44 @@ Prefer **web IDE / Qt Editor** for day-to-day package work; API powers both.
 
 ---
 
-## Docker (optional) · IDE bridge
+## Docker · load ROS2 + run package via colcon
 
-Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or a Docker engine on Linux).
+Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Linux Docker).
 
-**Flow:** edit package in IDE → start container → launch that package:
+Docker is **not** a thin shell — it **loads a real ROS2 distro**, **colcon-builds** the ament package you edit in the IDE, then runs:
+
+```bash
+ros2 launch <package> sim.launch.py
+```
+
+| Step | What happens |
+| --- | --- |
+| 1. IDE edit | `packages/demos/<pkg>/…` (Monaco / Qt Editor) |
+| 2. `lappa docker start` | Image: `/opt/ros/$DISTRO` + colcon + rclpy/launch; mount demos → `/ws/src` |
+| 3. `lappa docker launch -d <pkg>` | `colcon build --packages-select <pkg>` → `source install` → **`ros2 launch <pkg> sim.launch.py`** |
+| 4. Topics | Real ROS2 nodes: `/cmd_vel`, `/odom`, `/scan` (or arm joints) |
 
 ```powershell
-lappa docker start
-lappa docker launch --demo diff_drive_2w
+lappa docker start                          # build/start ROS2 container
+lappa docker build --demo diff_drive_2w     # optional: colcon only
+lappa docker launch --demo diff_drive_2w    # build + ros2 launch package
 lappa docker launch-stop
 lappa docker stop
 ```
 
-```powershell
-# manual compose (same mount)
-docker compose -f packages/docker/docker-compose.yml up --build -d
+Inside the container (debug):
+
+```bash
+docker exec -it lappa-ros2 bash
+source /opt/ros/humble/setup.bash
+/ros2_ws.sh status
+/ros2_ws.sh build diff_drive_2w
+/ros2_ws.sh launch diff_drive_2w sim.launch.py
+ros2 node list
+ros2 topic echo /odom
 ```
 
-Without Docker, the **native kinematics sim** still runs fully offline. Docker runs real `ros2 launch` on the **same `packages/demos` tree the IDE opens**.
+Without Docker, **native kinematics sim** still runs offline (`lappa sim start`). Docker is for **real ROS2 package execution**.
 
 ---
 
