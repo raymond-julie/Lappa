@@ -175,6 +175,32 @@ def sim_stats() -> None:
     rprint(SESSION.trajectory_stats())
 
 
+@demos_app.command("info")
+def demos_info(
+    name: str = typer.Argument(..., help="Demo package id e.g. diff_drive_2w"),
+) -> None:
+    """Show package path, file count, and launch file for a demo."""
+    from lappa.config import DEMOS_ROOT
+    from lappa.package_loader import load_package
+
+    path = DEMOS_ROOT / name
+    if not path.is_dir():
+        rprint({"ok": False, "error": f"unknown demo {name}"})
+        raise typer.Exit(1)
+    pkg = load_package(path)
+    launches = [f for f in pkg.files if "/launch/" in f or f.startswith("launch/")]
+    rprint(
+        {
+            "name": pkg.name,
+            "path": str(pkg.path),
+            "files": len(pkg.files),
+            "description": pkg.description,
+            "launch_files": launches[:20],
+            "has_urdf": any(f.endswith(".urdf") for f in pkg.files),
+        }
+    )
+
+
 @sim_app.command("trajectory")
 def sim_trajectory(
     out: Path | None = typer.Option(None, "--out", "-o", help="Write CSV path"),
