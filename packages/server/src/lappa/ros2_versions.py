@@ -148,6 +148,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \\
     ros-{code}-geometry-msgs \\
     ros-{code}-sensor-msgs \\
     ros-{code}-nav-msgs \\
+    ros-{code}-robot-state-publisher \\
+    ros-{code}-tf2-ros \\
+    ros-{code}-slam-toolbox \\
+    ros-{code}-xacro \\
     ros-{code}-ros2cli \\
     ros-{code}-ros2launch \\
     ros-{code}-ros2pkg \\
@@ -161,7 +165,7 @@ WORKDIR /ws
 RUN mkdir -p /ws/src /ws/log /ws/build /ws/install
 COPY entrypoint.sh /entrypoint.sh
 COPY ros2_ws.sh /ros2_ws.sh
-RUN chmod +x /entrypoint.sh /ros2_ws.sh
+RUN sed -i 's/\\r$//' /entrypoint.sh /ros2_ws.sh && chmod +x /entrypoint.sh /ros2_ws.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 # Keep ROS sourced; sleep so IDE can docker-exec colcon + ros2 launch

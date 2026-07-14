@@ -29,6 +29,27 @@ def test_omni_strafe():
     assert st.y > 0
 
 
+def test_tricycle_steering_changes_heading():
+    eng = create_engine("tricycle_3w")
+    eng.state.running = True
+    eng.set_cmd(linear_x=0.8, angular_z=0.5)
+    st = eng.step(dt=0.1)
+    assert st.x > 0
+    assert st.theta > 0
+    assert len(st.lidar) == 180
+
+
+def test_tricycle_footprint_does_not_cross_room_wall():
+    eng = create_engine("tricycle_3w")
+    eng.state.running = True
+    eng.state.x = 3.68
+    eng.set_cmd(linear_x=1.0, angular_z=0.0)
+    for _ in range(10):
+        eng.step(dt=0.1)
+    assert eng.state.x < 3.72
+    assert eng.state.collision is True
+
+
 def test_arm_fk_updates():
     eng = create_engine("simple_arm")
     eng.state.running = True

@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Lappa aligned 3D robot — package omni_3w -->
+<!-- Lappa aligned 3D robot - package omni_3w -->
 <robot name="omni_3w">
   <link name="base_footprint"/>
   <joint name="base_joint" type="fixed">

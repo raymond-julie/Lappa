@@ -18,6 +18,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-geometry-msgs \
     ros-humble-sensor-msgs \
     ros-humble-nav-msgs \
+    ros-humble-robot-state-publisher \
+    ros-humble-tf2-ros \
+    ros-humble-slam-toolbox \
+    ros-humble-xacro \
     ros-humble-ros2cli \
     ros-humble-ros2launch \
     ros-humble-ros2pkg \
@@ -31,7 +35,7 @@ WORKDIR /ws
 RUN mkdir -p /ws/src /ws/log /ws/build /ws/install
 COPY entrypoint.sh /entrypoint.sh
 COPY ros2_ws.sh /ros2_ws.sh
-RUN chmod +x /entrypoint.sh /ros2_ws.sh
+RUN sed -i 's/\r$//' /entrypoint.sh /ros2_ws.sh && chmod +x /entrypoint.sh /ros2_ws.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 # Keep ROS sourced; sleep so IDE can docker-exec colcon + ros2 launch

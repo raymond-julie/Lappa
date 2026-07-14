@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Lappa aligned 3D robot — package diff_drive_2w -->
+<!-- Lappa aligned 3D robot - package diff_drive_2w -->
 <robot name="diff_drive_2w">
   <link name="base_footprint"/>
   <joint name="base_joint" type="fixed">

@@ -11,6 +11,13 @@ QMainWindow, QWidget#central, QWidget#workbenchPage {
   background: #0b1020;
 }
 
+QToolTip {
+  background: #111827;
+  color: #eef6ff;
+  border: 1px solid #3b4b63;
+  padding: 5px 7px;
+}
+
 QFrame#welcomePage {
   background: #080d18;
 }
@@ -163,6 +170,28 @@ QFrame#simPanel {
   border-left: 1px solid #1e293b;
 }
 
+QFrame#simPlaceholder {
+  background: #0a0f1b;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+}
+
+QLabel#simPlaceholderIcon {
+  min-width: 40px;
+  min-height: 40px;
+}
+
+QLabel#simPlaceholderTitle {
+  color: #d8e2ef;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+QLabel#simPlaceholderPackage {
+  color: #7f91a8;
+  font-size: 12px;
+}
+
 QFrame#metricCard, QFrame#controlPanel {
   background: #111827;
   border: 1px solid #263449;
@@ -208,6 +237,106 @@ QLabel#metricValue {
   color: #f8fafc;
   font-family: "Cascadia Mono", "Consolas", monospace;
   font-weight: 700;
+}
+
+QLabel#driveKey {
+  background: #0b1220;
+  color: #91a4ba;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 3px 5px;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+QLabel#driveKey[active="true"] {
+  background: #1d4ed8;
+  color: #ffffff;
+  border-color: #60a5fa;
+}
+
+QLabel#keyboardStatus {
+  color: #7f91a8;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 10px;
+}
+
+QTreeWidget#displayTree {
+  background: #08111f;
+  alternate-background-color: #0c1727;
+  color: #c7d4e4;
+  border: 1px solid #263449;
+  border-radius: 3px;
+  outline: 0;
+  font-size: 10px;
+}
+
+QTreeWidget#displayTree::item {
+  min-height: 19px;
+  padding: 1px 3px;
+  border-radius: 0;
+}
+
+QTreeWidget#displayTree::item:selected {
+  background: #17345f;
+  color: #ffffff;
+}
+
+QTreeWidget#displayTree QHeaderView::section {
+  background: #111c2d;
+  color: #91a4ba;
+  border: 0;
+  border-right: 1px solid #263449;
+  border-bottom: 1px solid #263449;
+  padding: 3px 5px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+QTabWidget#simTabs::pane {
+  border: 1px solid #263449;
+  background: #0b1422;
+  top: -1px;
+}
+
+QWidget#simTabPage {
+  background: #0b1422;
+}
+
+QScrollBar:vertical {
+  background: #08111f;
+  width: 10px;
+  margin: 0;
+}
+
+QScrollBar::handle:vertical {
+  background: #334155;
+  min-height: 24px;
+  border-radius: 4px;
+}
+
+QScrollBar:horizontal {
+  background: #08111f;
+  height: 10px;
+  margin: 0;
+}
+
+QScrollBar::handle:horizontal {
+  background: #334155;
+  min-width: 24px;
+  border-radius: 4px;
+}
+
+QScrollBar::add-line, QScrollBar::sub-line,
+QScrollBar::add-page, QScrollBar::sub-page {
+  width: 0;
+  height: 0;
+  background: transparent;
+}
+
+QAbstractScrollArea::corner {
+  background: #08111f;
 }
 
 QPushButton {
@@ -360,6 +489,23 @@ QLabel#statusInfo {
   font-family: "Cascadia Mono", "Consolas", monospace;
   font-size: 11px;
   padding: 0 8px;
+}
+
+QLabel#slamStatus {
+  color: #7dd3fc;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 10px;
+}
+
+QProgressBar#slamProgress {
+  background: #1e293b;
+  border: none;
+  border-radius: 2px;
+}
+
+QProgressBar#slamProgress::chunk {
+  background: #22c55e;
+  border-radius: 2px;
 }
 
 QSlider::groove:horizontal {

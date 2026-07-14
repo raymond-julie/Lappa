@@ -610,6 +610,66 @@ def launch_status() -> dict[str, Any]:
     }
 
 
+def publish_twist(
+    linear_x: float = 0.0,
+    linear_y: float = 0.0,
+    angular_z: float = 0.0,
+) -> dict[str, Any]:
+    """Publish one geometry_msgs/Twist command to the active Docker launch."""
+    st = status()
+    session = st.get("session") or {}
+    if not st.get("running") or not session.get("running"):
+        return {
+            "ok": False,
+            "error": "No active ROS2 Docker launch is available for /cmd_vel.",
+            "status": st,
+        }
+    values = (float(linear_x), float(linear_y), float(angular_z))
+    args = ["twist", *(f"{value:.4f}" for value in values)]
+    code, out, err = _exec_ros2_ws(args, timeout=15.0)
+    return {
+        "ok": code == 0,
+        "code": code,
+        "twist": {
+            "linear_x": values[0],
+            "linear_y": values[1],
+            "angular_z": values[2],
+        },
+        "stdout": out[-800:],
+        "stderr": err[-800:],
+        "error": None if code == 0 else (err or out or "ROS2 /cmd_vel publish failed").strip(),
+    }
+
+
+def set_auto_explore(enabled: bool) -> dict[str, Any]:
+    """Enable or stop autonomous mapping on the active ROS2 launch."""
+    st = status()
+    session = st.get("session") or {}
+    if not st.get("running") or not session.get("running"):
+        return {
+            "ok": False,
+            "control": "auto_explore",
+            "enabled": bool(enabled),
+            "error": "No active ROS2 Docker launch is available for auto mapping.",
+            "status": st,
+        }
+    code, out, err = _exec_ros2_ws(
+        ["auto-map", "on" if enabled else "off"],
+        timeout=15.0,
+    )
+    return {
+        "ok": code == 0,
+        "code": code,
+        "control": "auto_explore",
+        "enabled": bool(enabled),
+        "stdout": out[-800:],
+        "stderr": err[-800:],
+        "error": None
+        if code == 0
+        else (err or out or "ROS2 auto mapping control failed").strip(),
+    }
+
+
 def show_info() -> dict[str, Any]:
     selected = get_selected()
     return {
@@ -619,7 +679,7 @@ def show_info() -> dict[str, Any]:
             "1. IDE opens packages/demos/<pkg> (same tree Docker mounts at /ws/src)",
             "2. lappa docker start: image has /opt/ros/$DISTRO + colcon",
             "3. lappa docker launch --demo <pkg> runs: colcon build + ros2 launch <pkg> sim.launch.py",
-            "4. Nodes/topics are real ROS2 (/cmd_vel, /odom, /scan) inside the container",
+            "4. Nodes/topics are real ROS2 (/cmd_vel, /odom, /scan; SLAM adds /map)",
             "5. Offline fallback: lappa sim start --demo <pkg> (native kinematics)",
         ],
         "status": status(),

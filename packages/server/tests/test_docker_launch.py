@@ -55,6 +55,11 @@ def test_dockerfile_includes_colcon_and_rclpy():
     assert "rclpy" in df
     assert "ros:humble" in df
     assert "ros2_ws.sh" in df
+    assert "ros-humble-tf2-ros" in df
+    assert "ros-humble-slam-toolbox" in df
+    assert "ros-humble-robot-state-publisher" in df
+    assert "ros-humble-xacro" in df
+    assert "sed -i 's/\\r$//'" in df
 
 
 def test_ros2_helper_stops_the_recorded_process_group():
@@ -64,7 +69,94 @@ def test_ros2_helper_stops_the_recorded_process_group():
     assert "setsid ros2 launch" in helper
     assert "lappa_ros2_launch.pgid" in helper
     assert 'kill -TERM -- "-${launch_pgid}"' in helper
+    assert "ros2 topic pub --once /cmd_vel" in helper
+    assert "ros2 topic pub --once /lappa/auto_explore" in helper
     assert "init: true" in compose
+
+
+def test_publish_twist_uses_active_ros2_helper(monkeypatch):
+    monkeypatch.setattr(
+        docker_bridge,
+        "status",
+        lambda: {
+            "running": True,
+            "session": {"running": True, "demo": "tricycle_3w"},
+        },
+    )
+    captured = {}
+
+    def fake_exec(args, timeout=30.0):
+        captured["args"] = args
+        captured["timeout"] = timeout
+        return 0, "published", ""
+
+    monkeypatch.setattr(docker_bridge, "_exec_ros2_ws", fake_exec)
+
+    result = docker_bridge.publish_twist(0.65, 0.0, 0.55)
+
+    assert result["ok"] is True
+    assert captured["args"] == ["twist", "0.6500", "0.0000", "0.5500"]
+    assert captured["timeout"] == 15.0
+
+
+def test_auto_explore_uses_active_ros2_helper(monkeypatch):
+    monkeypatch.setattr(
+        docker_bridge,
+        "status",
+        lambda: {
+            "running": True,
+            "session": {"running": True, "demo": "tricycle_3w"},
+        },
+    )
+    captured = {}
+
+    def fake_exec(args, timeout=30.0):
+        captured["args"] = args
+        captured["timeout"] = timeout
+        return 0, "published", ""
+
+    monkeypatch.setattr(docker_bridge, "_exec_ros2_ws", fake_exec)
+
+    result = docker_bridge.set_auto_explore(True)
+
+    assert result["ok"] is True
+    assert result["control"] == "auto_explore"
+    assert captured["args"] == ["auto-map", "on"]
+    assert captured["timeout"] == 15.0
+
+
+def test_tricycle_launch_includes_slam_toolbox_and_mapping_params():
+    root = DEMOS_ROOT / "tricycle_3w"
+    launch = (root / "launch" / "sim.launch.py").read_text(encoding="utf-8")
+    params = (root / "config" / "params.yaml").read_text(encoding="utf-8")
+
+    assert 'package="slam_toolbox"' in launch
+    assert 'executable="async_slam_toolbox_node"' in launch
+    assert 'executable="slam_bridge"' in launch
+    assert 'package="robot_state_publisher"' in launch
+    assert 'FindExecutable(name="xacro")' in launch
+    assert "ParameterValue(" in launch
+    assert "map_frame: map" in params
+    assert "base_frame: base_link" in params
+    assert "lidar_rays: 180" in params
+    assert "snapshot_path:" in params
+
+    setup = (root / "setup.py").read_text(encoding="utf-8")
+    assert "slam_bridge = tricycle_3w.slam_bridge:main" in setup
+    assert 'glob("urdf/*")' in setup
+    assert 'glob("worlds/*")' in setup
+
+    xacro = (root / "urdf" / "robot.urdf.xacro").read_text(encoding="utf-8")
+    assert 'name="chassis_length" value="0.40"' in xacro
+    assert 'name="chassis_width" value="0.26"' in xacro
+    assert 'name="chassis_height" value="0.15"' in xacro
+    assert "TUPM96/xe_tham_do" in xacro
+    assert '<link name="base_footprint"/>' in xacro
+    assert 'name="laser_joint" type="fixed"' in xacro
+
+    teleop = (root / "tricycle_3w" / "teleop.py").read_text(encoding="utf-8")
+    assert 'transform.child_frame_id = "base_footprint"' in teleop
+    assert 'self.declare_parameter("world_map", "warehouse")' in teleop
 
 
 def test_stop_launch_without_docker_ok(monkeypatch):

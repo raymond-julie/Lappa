@@ -1,0 +1,210 @@
+<?xml version="1.0"?>
+<!--
+  Lappa tricycle model derived from the chassis proportions in:
+  https://github.com/TUPM96/xe_tham_do
+
+  The source project models a 0.40 x 0.26 x 0.15 m box chassis. This Xacro
+  keeps those dimensions and adapts the running gear to Lappa's three-wheel
+  steering demo.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="tricycle_3w">
+  <xacro:property name="chassis_length" value="0.40"/>
+  <xacro:property name="chassis_width" value="0.26"/>
+  <xacro:property name="chassis_height" value="0.15"/>
+  <xacro:property name="chassis_mass" value="5.0"/>
+  <xacro:property name="rear_wheel_radius" value="0.10"/>
+  <xacro:property name="front_wheel_radius" value="0.085"/>
+  <xacro:property name="wheel_width" value="0.055"/>
+  <xacro:property name="wheel_mass" value="0.35"/>
+  <xacro:property name="rear_wheel_x" value="-0.13"/>
+  <xacro:property
+    name="rear_wheel_y"
+    value="${chassis_width / 2 + wheel_width / 2}"/>
+  <xacro:property name="front_wheel_x" value="0.25"/>
+  <xacro:property name="chassis_center_z" value="${rear_wheel_radius + chassis_height / 2}"/>
+
+  <material name="chassis_orange">
+    <color rgba="0.96 0.38 0.09 1"/>
+  </material>
+  <material name="wheel_rubber">
+    <color rgba="0.055 0.065 0.075 1"/>
+  </material>
+  <material name="sensor_dark">
+    <color rgba="0.12 0.15 0.18 1"/>
+  </material>
+  <material name="sensor_glass">
+    <color rgba="0.10 0.62 0.86 1"/>
+  </material>
+
+  <xacro:macro name="box_inertial" params="mass x y z origin_z:=0">
+    <inertial>
+      <origin xyz="0 0 ${origin_z}" rpy="0 0 0"/>
+      <mass value="${mass}"/>
+      <inertia
+        ixx="${mass * (y * y + z * z) / 12}"
+        ixy="0" ixz="0"
+        iyy="${mass * (x * x + z * z) / 12}"
+        iyz="0"
+        izz="${mass * (x * x + y * y) / 12}"/>
+    </inertial>
+  </xacro:macro>
+
+  <xacro:macro name="wheel" params="name radius parent xyz steering:=false">
+    <link name="${name}">
+      <visual>
+        <origin xyz="0 0 0" rpy="${pi / 2} 0 0"/>
+        <geometry>
+          <cylinder radius="${radius}" length="${wheel_width}"/>
+        </geometry>
+        <material name="wheel_rubber"/>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="${pi / 2} 0 0"/>
+        <geometry>
+          <cylinder radius="${radius}" length="${wheel_width}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <mass value="${wheel_mass}"/>
+        <inertia
+          ixx="${wheel_mass * (3 * radius * radius + wheel_width * wheel_width) / 12}"
+          ixy="0" ixz="0"
+          iyy="${wheel_mass * radius * radius / 2}"
+          iyz="0"
+          izz="${wheel_mass * (3 * radius * radius + wheel_width * wheel_width) / 12}"/>
+      </inertial>
+    </link>
+    <joint name="${name}_joint" type="continuous">
+      <parent link="${parent}"/>
+      <child link="${name}"/>
+      <origin xyz="${xyz}" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+    </joint>
+  </xacro:macro>
+
+  <link name="base_footprint"/>
+  <joint name="base_footprint_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 ${chassis_center_z}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+      </geometry>
+      <material name="chassis_orange"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${chassis_center_z}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+      </geometry>
+    </collision>
+    <xacro:box_inertial
+      mass="${chassis_mass}"
+      x="${chassis_length}"
+      y="${chassis_width}"
+      z="${chassis_height}"
+      origin_z="${chassis_center_z}"/>
+  </link>
+
+  <xacro:wheel
+    name="rear_left_wheel"
+    radius="${rear_wheel_radius}"
+    parent="base_link"
+    xyz="${rear_wheel_x} ${rear_wheel_y} ${rear_wheel_radius}"/>
+  <xacro:wheel
+    name="rear_right_wheel"
+    radius="${rear_wheel_radius}"
+    parent="base_link"
+    xyz="${rear_wheel_x} ${-rear_wheel_y} ${rear_wheel_radius}"/>
+
+  <link name="steering_fork">
+    <visual>
+      <origin xyz="0 0 0.045" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.035 0.035 0.16"/>
+      </geometry>
+      <material name="sensor_dark"/>
+    </visual>
+    <xacro:box_inertial mass="0.20" x="0.035" y="0.035" z="0.16" origin_z="0.045"/>
+  </link>
+  <joint name="steering_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="steering_fork"/>
+    <origin xyz="${front_wheel_x} 0 ${front_wheel_radius}" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-0.75" upper="0.75" effort="20" velocity="2.5"/>
+  </joint>
+  <xacro:wheel
+    name="front_wheel"
+    radius="${front_wheel_radius}"
+    parent="steering_fork"
+    xyz="0 0 0"/>
+
+  <link name="lidar_mount">
+    <visual>
+      <origin xyz="0 0 0.045" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.018" length="0.09"/>
+      </geometry>
+      <material name="sensor_dark"/>
+    </visual>
+  </link>
+  <joint name="lidar_mount_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="lidar_mount"/>
+    <origin xyz="0.18 0 ${chassis_center_z + chassis_height / 2}" rpy="0 0 0"/>
+  </joint>
+
+  <link name="laser">
+    <visual>
+      <geometry>
+        <cylinder radius="0.05" length="0.04"/>
+      </geometry>
+      <material name="sensor_glass"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.05" length="0.04"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="laser_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="laser"/>
+    <origin xyz="0.26 0 0.212" rpy="0 0 0"/>
+  </joint>
+
+  <link name="camera_mast">
+    <visual>
+      <origin xyz="0 0 0.06" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.025 0.025 0.12"/>
+      </geometry>
+      <material name="sensor_dark"/>
+    </visual>
+  </link>
+  <joint name="camera_mast_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="camera_mast"/>
+    <origin xyz="0.10 0 ${chassis_center_z + chassis_height / 2}" rpy="0 0 0"/>
+  </joint>
+
+  <link name="camera_link">
+    <visual>
+      <geometry>
+        <box size="0.03 0.06 0.035"/>
+      </geometry>
+      <material name="sensor_glass"/>
+    </visual>
+  </link>
+  <joint name="camera_joint" type="fixed">
+    <parent link="camera_mast"/>
+    <child link="camera_link"/>
+    <origin xyz="0.015 0 0.13" rpy="0 0 0"/>
+  </joint>
+</robot>

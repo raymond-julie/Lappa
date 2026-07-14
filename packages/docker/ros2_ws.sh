@@ -5,6 +5,8 @@
 #   /ros2_ws.sh launch <pkg> [launch_file]
 #   /ros2_ws.sh status
 #   /ros2_ws.sh stop
+#   /ros2_ws.sh twist <linear_x> <linear_y> <angular_z>
+#   /ros2_ws.sh auto-map <on|off>
 # ROS setup files probe optional variables, so nounset cannot stay enabled here.
 set -eo pipefail
 
@@ -165,13 +167,37 @@ cmd_stop() {
   echo "[lappa] stopped ros2 launch processes"
 }
 
+cmd_twist() {
+  local linear_x="${1:-0.0}"
+  local linear_y="${2:-0.0}"
+  local angular_z="${3:-0.0}"
+  source_ros
+  local message
+  message="{linear: {x: ${linear_x}, y: ${linear_y}, z: 0.0}, angular: {x: 0.0, y: 0.0, z: ${angular_z}}}"
+  timeout 10 ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist "$message"
+}
+
+cmd_auto_map() {
+  local requested="${1:-off}"
+  local enabled="false"
+  case "${requested,,}" in
+    on|true|1) enabled="true" ;;
+    off|false|0) enabled="false" ;;
+    *) echo "usage: $0 auto-map {on|off}" >&2; return 2 ;;
+  esac
+  source_ros
+  timeout 10 ros2 topic pub --once /lappa/auto_explore std_msgs/msg/Bool "{data: ${enabled}}"
+}
+
 case "${1:-}" in
   build) shift; cmd_build "$@" ;;
   launch) shift; cmd_launch "$@" ;;
   status) cmd_status ;;
   stop) cmd_stop ;;
+  twist) shift; cmd_twist "$@" ;;
+  auto-map) shift; cmd_auto_map "$@" ;;
   *)
-    echo "usage: $0 {build|launch|status|stop} ..." >&2
+    echo "usage: $0 {build|launch|status|stop|twist|auto-map} ..." >&2
     exit 1
     ;;
 esac

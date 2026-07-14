@@ -5,10 +5,11 @@ from __future__ import annotations
 import json
 import math
 import threading
+import time
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QSettings, QSize, Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import QPointF, QRectF, QSettings, QSize, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import (
     QAction,
     QBrush,
@@ -41,6 +42,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QProgressBar,
     QSlider,
     QSplitter,
     QStackedWidget,
@@ -63,13 +65,43 @@ from lappa.sim.session import SESSION
 
 
 WELCOME_SETTINGS_KEY = "onboarding/welcome_seen"
+DRIVE_KEY_VALUES = {
+    Qt.Key.Key_W.value,
+    Qt.Key.Key_A.value,
+    Qt.Key.Key_S.value,
+    Qt.Key.Key_D.value,
+    Qt.Key.Key_Up.value,
+    Qt.Key.Key_Down.value,
+    Qt.Key.Key_Left.value,
+    Qt.Key.Key_Right.value,
+    Qt.Key.Key_Space.value,
+}
+AUTO_MAP_WAYPOINTS = [
+    (2.5, 0.0),
+    (2.5, 2.5),
+    (0.0, 2.8),
+    (-2.6, 2.5),
+    (-2.6, -2.5),
+    (0.0, -2.8),
+    (2.5, -2.5),
+]
 
 
-def _button(text: str, *, primary: bool = False, compact: bool = False) -> QPushButton:
+def _button(
+    text: str,
+    *,
+    primary: bool = False,
+    compact: bool = False,
+    tooltip: str = "",
+) -> QPushButton:
     b = QPushButton(text)
     b.setCursor(Qt.CursorShape.PointingHandCursor)
     b.setProperty("primary", primary)
     b.setProperty("compact", compact)
+    hint = tooltip or text
+    b.setToolTip(hint)
+    b.setStatusTip(hint)
+    b.setAccessibleName(text)
     return b
 
 
@@ -166,6 +198,8 @@ def _tool_button(
     b.setIcon(_icon(icon))
     b.setIconSize(QSize(18, 18))
     b.setToolTip(tooltip)
+    b.setStatusTip(tooltip)
+    b.setAccessibleName(tooltip)
     b.setCursor(Qt.CursorShape.PointingHandCursor)
     b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
     b.setFixedSize(QSize(42, 34))
@@ -181,6 +215,8 @@ def _toolbar_button(
     b.setIcon(_icon(icon))
     b.setIconSize(QSize(17, 17))
     b.setToolTip(tooltip)
+    b.setStatusTip(tooltip)
+    b.setAccessibleName(tooltip)
     b.setCursor(Qt.CursorShape.PointingHandCursor)
     b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
     b.setFixedSize(QSize(width, 28))
@@ -211,6 +247,9 @@ def _metric(title: str) -> tuple[QFrame, QLabel]:
 class SimCanvas(QWidget):
     """Interactive RViz-style viewport for the native simulator."""
 
+    drive_key_pressed = Signal(int)
+    drive_key_released = Signal(int)
+
     def __init__(self) -> None:
         super().__init__()
         self.setMinimumSize(360, 300)
@@ -232,8 +271,19 @@ class SimCanvas(QWidget):
         self.show_grid = True
         self.show_laser = True
         self.show_trail = True
+        self.show_robot = True
+        self.show_tf = True
+        self.show_map = True
+        self.fixed_frame = "map"
+        self.mapping_active = False
+        self.mapped_cells: dict[tuple[int, int], int] = {}
+        self.map_resolution = 0.2
+        self.map_origin = (0.0, 0.0, 0.0)
+        self.map_source = "native"
+        self.map_metadata: dict = {}
         self._drag_position: QPointF | None = None
         self.setMouseTracking(True)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
     def set_state(self, st: dict) -> None:
         self.state = st or self.state
@@ -242,22 +292,111 @@ class SimCanvas(QWidget):
             self.trail.append((x, y))
             if len(self.trail) > 260:
                 self.trail = self.trail[-260:]
+            if self.mapping_active and self.map_source != "slam_toolbox":
+                self._integrate_map_scan(st)
         self.update()
+
+    def set_slam_snapshot(self, snapshot: dict) -> None:
+        map_data = snapshot.get("map") or {}
+        cells: dict[tuple[int, int], int] = {}
+        for raw_cell in map_data.get("cells") or []:
+            if not isinstance(raw_cell, list) or len(raw_cell) != 3:
+                continue
+            cells[(int(raw_cell[0]), int(raw_cell[1]))] = int(raw_cell[2])
+        origin = map_data.get("origin") or {}
+        self.mapped_cells = cells
+        self.map_resolution = max(0.001, float(map_data.get("resolution") or 0.05))
+        self.map_origin = (
+            float(origin.get("x") or 0.0),
+            float(origin.get("y") or 0.0),
+            float(origin.get("yaw") or 0.0),
+        )
+        self.map_metadata = dict(map_data)
+        self.map_source = "slam_toolbox"
+
+        pose = snapshot.get("pose") or {}
+        x = float(pose.get("x") or 0.0)
+        y = float(pose.get("y") or 0.0)
+        state = {
+            **self.state,
+            "x": x,
+            "y": y,
+            "theta": float(pose.get("theta") or 0.0),
+            "kind": "tricycle_3w",
+            "lidar": list(snapshot.get("scan") or []),
+            "twist": dict(snapshot.get("twist") or {}),
+            "running": True,
+            "map_source": "slam_toolbox",
+        }
+        self.state = state
+        if not self.trail or math.hypot(x - self.trail[-1][0], y - self.trail[-1][1]) > 0.015:
+            self.trail.append((x, y))
+            if len(self.trail) > 260:
+                self.trail = self.trail[-260:]
+        self.update()
+
+    def _integrate_map_scan(self, state: dict) -> None:
+        lidar = state.get("lidar") or []
+        if not lidar:
+            return
+        x = float(state.get("x") or 0.0)
+        y = float(state.get("y") or 0.0)
+        theta = float(state.get("theta") or 0.0)
+        resolution = 0.2
+        for index in range(0, len(lidar), 3):
+            distance = max(0.0, float(lidar[index]))
+            angle = theta + index / len(lidar) * math.tau
+            step_count = max(0, int((distance - 0.12) / resolution))
+            for step in range(1, step_count + 1):
+                radius = step * resolution
+                cell = (
+                    round((x + math.cos(angle) * radius) / resolution),
+                    round((y + math.sin(angle) * radius) / resolution),
+                )
+                if self.mapped_cells.get(cell) != 100:
+                    self.mapped_cells[cell] = 0
+            endpoint = (
+                round((x + math.cos(angle) * distance) / resolution),
+                round((y + math.sin(angle) * distance) / resolution),
+            )
+            self.mapped_cells[endpoint] = 100
 
     def clear_trail(self) -> None:
         self.trail.clear()
+        self.update()
+
+    def set_mapping_active(self, enabled: bool) -> None:
+        if enabled and not self.mapping_active:
+            self.mapped_cells.clear()
+            self.map_resolution = 0.2
+            self.map_origin = (0.0, 0.0, 0.0)
+            self.map_source = "native"
+            self.map_metadata = {}
+        elif not enabled:
+            self.map_source = "native"
+        self.mapping_active = enabled
         self.update()
 
     def set_view_mode(self, mode: str) -> None:
         self.view_mode = mode if mode in {"Orbit", "Top", "Follow"} else "Orbit"
         if self.view_mode == "Top":
             self.camera_yaw = 0.0
+            self.zoom = 1.05
         elif self.view_mode == "Orbit":
             self.camera_yaw = math.radians(-42)
+            self.zoom = 1.0
+        else:
+            self.camera_yaw = math.radians(-42)
+            self.zoom = 5.4
         self.update()
 
     def reset_view(self) -> None:
-        self.zoom = 1.0
+        if self.view_mode == "Follow":
+            self.zoom = 5.4
+        elif self.view_mode == "Top":
+            self.zoom = 1.05
+        else:
+            self.zoom = 1.0
         self.camera_yaw = 0.0 if self.view_mode == "Top" else math.radians(-42)
         self.update()
 
@@ -273,13 +412,48 @@ class SimCanvas(QWidget):
         self.show_trail = visible
         self.update()
 
+    def set_robot_visible(self, visible: bool) -> None:
+        self.show_robot = visible
+        self.update()
+
+    def set_tf_visible(self, visible: bool) -> None:
+        self.show_tf = visible
+        self.update()
+
+    def set_map_visible(self, visible: bool) -> None:
+        self.show_map = visible
+        self.update()
+
+    def set_fixed_frame(self, frame: str) -> None:
+        self.fixed_frame = frame if frame in {"map", "odom", "base_link"} else "map"
+        self.update()
+
     def mousePressEvent(self, event) -> None:  # noqa: N802
+        self.setFocus(Qt.FocusReason.MouseFocusReason)
         if event.button() == Qt.MouseButton.LeftButton and self.view_mode != "Top":
             self._drag_position = event.position()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
             event.accept()
             return
         super().mousePressEvent(event)
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        key = int(event.key())
+        if key in DRIVE_KEY_VALUES:
+            if not event.isAutoRepeat():
+                self.drive_key_pressed.emit(key)
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event) -> None:  # noqa: N802
+        key = int(event.key())
+        if key in DRIVE_KEY_VALUES:
+            if not event.isAutoRepeat():
+                self.drive_key_released.emit(key)
+            event.accept()
+            return
+        super().keyReleaseEvent(event)
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
         if self._drag_position is not None:
@@ -301,7 +475,7 @@ class SimCanvas(QWidget):
 
     def wheelEvent(self, event) -> None:  # noqa: N802
         factor = 1.1 if event.angleDelta().y() > 0 else 1 / 1.1
-        self.zoom = min(2.4, max(0.55, self.zoom * factor))
+        self.zoom = min(8.0, max(0.55, self.zoom * factor))
         self.update()
         event.accept()
 
@@ -362,6 +536,43 @@ class SimCanvas(QWidget):
         painter.setBrush(color)
         painter.drawPolygon(QPolygonF(top))
 
+    def _draw_oriented_prism(
+        self,
+        painter: QPainter,
+        cx: float,
+        cy: float,
+        yaw: float,
+        length: float,
+        width: float,
+        z0: float,
+        z1: float,
+        color: QColor,
+    ) -> None:
+        local = [
+            (-length / 2, -width / 2),
+            (length / 2, -width / 2),
+            (length / 2, width / 2),
+            (-length / 2, width / 2),
+        ]
+        world = [self._robot_world_point(cx, cy, yaw, px, py) for px, py in local]
+        bottom = [self._project(px, py, z0) for px, py in world]
+        top = [self._project(px, py, z1) for px, py in world]
+        painter.setPen(QPen(self._shade(color, 1.3), 1))
+        for index in range(4):
+            painter.setBrush(self._shade(color, 0.55 + index * 0.08))
+            painter.drawPolygon(
+                QPolygonF(
+                    [
+                        bottom[index],
+                        bottom[(index + 1) % 4],
+                        top[(index + 1) % 4],
+                        top[index],
+                    ]
+                )
+            )
+        painter.setBrush(color)
+        painter.drawPolygon(QPolygonF(top))
+
     @staticmethod
     def _robot_world_point(
         x: float,
@@ -404,6 +615,268 @@ class SimCanvas(QWidget):
         painter.setBrush(QColor("#d7f2ff"))
         painter.drawEllipse(self._project(*nose, 0.36), 2.5, 2.5)
 
+    def _draw_beam_3d(
+        self,
+        painter: QPainter,
+        start: tuple[float, float],
+        end: tuple[float, float],
+        width: float,
+        z0: float,
+        z1: float,
+        color: QColor,
+    ) -> None:
+        dx, dy = end[0] - start[0], end[1] - start[1]
+        self._draw_oriented_prism(
+            painter,
+            (start[0] + end[0]) / 2,
+            (start[1] + end[1]) / 2,
+            math.atan2(dy, dx),
+            math.hypot(dx, dy),
+            width,
+            z0,
+            z1,
+            color,
+        )
+
+    def _draw_wheel_3d(
+        self,
+        painter: QPainter,
+        cx: float,
+        cy: float,
+        yaw: float,
+        radius: float,
+        width: float,
+        spin: float,
+    ) -> None:
+        """Draw a vertical wheel as a shaded cylinder with rim and spokes."""
+        segments = 24
+        forward = (math.cos(yaw), math.sin(yaw))
+        lateral = (-math.sin(yaw), math.cos(yaw))
+
+        def ring(side: float, ratio: float = 1.0) -> list[QPointF]:
+            lateral_offset = side * width / 2
+            points: list[QPointF] = []
+            for index in range(segments):
+                angle = spin + math.tau * index / segments
+                along = math.cos(angle) * radius * ratio
+                vertical = math.sin(angle) * radius * ratio
+                points.append(
+                    self._project(
+                        cx + forward[0] * along + lateral[0] * lateral_offset,
+                        cy + forward[1] * along + lateral[1] * lateral_offset,
+                        radius + vertical,
+                    )
+                )
+            return points
+
+        def side_depth(side: float) -> float:
+            world_x = cx + lateral[0] * side * width / 2
+            world_y = cy + lateral[1] * side * width / 2
+            return world_x * math.sin(self.camera_yaw) + world_y * math.cos(
+                self.camera_yaw
+            )
+
+        near_side = 1.0 if side_depth(1.0) >= side_depth(-1.0) else -1.0
+        far_side = -near_side
+        far_ring = ring(far_side)
+        near_ring = ring(near_side)
+
+        painter.setPen(QPen(QColor("#475569"), 1))
+        painter.setBrush(QColor("#0b111a"))
+        painter.drawPolygon(QPolygonF(far_ring))
+        for index in range(segments):
+            next_index = (index + 1) % segments
+            painter.setBrush(QColor("#182230" if index % 2 else "#111827"))
+            painter.drawPolygon(
+                QPolygonF(
+                    [
+                        far_ring[index],
+                        far_ring[next_index],
+                        near_ring[next_index],
+                        near_ring[index],
+                    ]
+                )
+            )
+
+        painter.setBrush(QColor("#090d14"))
+        painter.setPen(QPen(QColor("#64748b"), 1.2))
+        painter.drawPolygon(QPolygonF(near_ring))
+
+        rim = ring(near_side, 0.62)
+        painter.setBrush(QColor("#263342"))
+        painter.setPen(QPen(QColor("#cbd5e1"), 1.5))
+        painter.drawPolygon(QPolygonF(rim))
+
+        hub = self._project(
+            cx + lateral[0] * near_side * width / 2,
+            cy + lateral[1] * near_side * width / 2,
+            radius,
+        )
+        painter.setPen(QPen(QColor("#b8c4d3"), 2.0))
+        for index in range(1, segments, 5):
+            painter.drawLine(hub, rim[index])
+        painter.setBrush(QColor("#111827"))
+        painter.setPen(QPen(QColor("#e2e8f0"), 1.4))
+        painter.drawEllipse(hub, 4.2, 4.2)
+        painter.setBrush(QColor("#f59e0b"))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(hub, 1.7, 1.7)
+
+    def _draw_tricycle_3d(
+        self,
+        painter: QPainter,
+        x: float,
+        y: float,
+        theta: float,
+    ) -> None:
+        twist = self.state.get("twist") or {}
+        steering = max(-0.75, min(0.75, float(twist.get("angular_z") or 0.0)))
+        joints = self.state.get("joints") or []
+        rear_left_spin = float(joints[1]) if len(joints) > 1 else 0.0
+        rear_right_spin = float(joints[2]) if len(joints) > 2 else 0.0
+        front_spin = (rear_left_spin + rear_right_spin) / 2
+        wheel_specs = [
+            (0.25, 0.0, theta + steering, 0.085, 0.055, front_spin),
+            (-0.13, 0.15, theta, 0.10, 0.055, rear_left_spin),
+            (-0.13, -0.15, theta, 0.10, 0.055, rear_right_spin),
+        ]
+        for local_x, local_y, wheel_yaw, radius, width, spin in wheel_specs:
+            wheel_x, wheel_y = self._robot_world_point(
+                x,
+                y,
+                theta,
+                local_x,
+                local_y,
+            )
+            self._draw_wheel_3d(
+                painter,
+                wheel_x,
+                wheel_y,
+                wheel_yaw,
+                radius,
+                width,
+                spin,
+            )
+
+        body_x, body_y = self._robot_world_point(x, y, theta, -0.02, 0.0)
+        self._draw_oriented_prism(
+            painter,
+            body_x,
+            body_y,
+            theta,
+            0.40,
+            0.26,
+            0.10,
+            0.25,
+            QColor("#d97706"),
+        )
+
+        self._draw_oriented_prism(
+            painter,
+            body_x,
+            body_y,
+            theta,
+            0.42,
+            0.28,
+            0.08,
+            0.105,
+            QColor("#273444"),
+        )
+
+        controller_x, controller_y = self._robot_world_point(x, y, theta, -0.06, 0.0)
+        self._draw_oriented_prism(
+            painter,
+            controller_x,
+            controller_y,
+            theta,
+            0.22,
+            0.15,
+            0.25,
+            0.29,
+            QColor("#1f2937"),
+        )
+        head_x, head_y = self._robot_world_point(x, y, theta, 0.18, 0.0)
+        self._draw_oriented_prism(
+            painter,
+            head_x,
+            head_y,
+            theta,
+            0.07,
+            0.08,
+            0.11,
+            0.25,
+            QColor("#475569"),
+        )
+
+        front_x, front_y = self._robot_world_point(x, y, theta, 0.25, 0.0)
+        wheel_lateral = (-math.sin(theta + steering), math.cos(theta + steering))
+        for side in (-1.0, 1.0):
+            fork_bottom = (
+                front_x + wheel_lateral[0] * side * 0.028,
+                front_y + wheel_lateral[1] * side * 0.028,
+            )
+            fork_top = self._robot_world_point(x, y, theta, 0.18, side * 0.028)
+            painter.setPen(QPen(QColor("#cbd5e1"), 2.4))
+            painter.drawLine(
+                self._project(*fork_bottom, 0.14),
+                self._project(*fork_top, 0.245),
+            )
+
+        painter.setPen(QPen(QColor("#fbbf24"), 2.2))
+        warning_left = self._robot_world_point(x, y, theta, -0.205, 0.09)
+        warning_right = self._robot_world_point(x, y, theta, -0.205, -0.09)
+        painter.drawLine(
+            self._project(*warning_left, 0.205),
+            self._project(*warning_right, 0.205),
+        )
+
+        camera_x, camera_y = self._robot_world_point(x, y, theta, 0.11, 0.0)
+        self._draw_oriented_prism(
+            painter,
+            camera_x,
+            camera_y,
+            theta,
+            0.045,
+            0.055,
+            0.29,
+            0.34,
+            QColor("#111827"),
+        )
+
+        lidar_x, lidar_y = self._robot_world_point(x, y, theta, -0.01, 0.0)
+        painter.setPen(QPen(QColor("#fbbf24"), 2))
+        painter.drawLine(
+            self._project(lidar_x, lidar_y, 0.29),
+            self._project(lidar_x, lidar_y, 0.34),
+        )
+        painter.setBrush(QColor("#0f172a"))
+        painter.setPen(QPen(QColor("#cbd5e1"), 1.2))
+        painter.drawEllipse(self._project(lidar_x, lidar_y, 0.345), 7.0, 4.5)
+
+        steer_tip = (
+            front_x + math.cos(theta + steering) * 0.20,
+            front_y + math.sin(theta + steering) * 0.20,
+        )
+        painter.setPen(QPen(QColor("#38bdf8"), 2))
+        painter.drawLine(
+            self._project(front_x, front_y, 0.12),
+            self._project(*steer_tip, 0.12),
+        )
+
+        if bool(self.state.get("collision")):
+            footprint = [
+                self._robot_world_point(x, y, theta, px, py)
+                for px, py in [
+                    (-0.24, -0.19),
+                    (0.34, -0.19),
+                    (0.34, 0.19),
+                    (-0.24, 0.19),
+                ]
+            ]
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(QColor("#ef4444"), 2, Qt.PenStyle.DashLine))
+            painter.drawPolygon(QPolygonF([self._project(*point, 0.02) for point in footprint]))
+
     def _draw_arm_3d(self, painter: QPainter) -> None:
         joints = self.state.get("joints") or [0.4, -0.6]
         j0 = float(joints[0]) if joints else 0.4
@@ -432,10 +905,20 @@ class SimCanvas(QWidget):
         painter.setFont(QFont("Segoe UI", 9))
         painter.setPen(QColor("#b7c8da"))
         painter.setBrush(QColor(8, 15, 27, 220))
-        painter.drawRoundedRect(10, 10, 210, 48, 4, 4)
-        painter.drawText(20, 30, f"Fixed Frame: map    View: {self.view_mode}")
-        painter.setPen(QColor("#7f94aa"))
-        painter.drawText(20, 49, "Native kinematics | 1 m grid")
+        painter.drawRoundedRect(10, 10, 248, 52, 4, 4)
+        painter.drawText(
+            20,
+            30,
+            f"Fixed Frame: {self.fixed_frame}    View: {self.view_mode}",
+        )
+        painter.setPen(QColor("#4ade80"))
+        status = "BLOCKED" if bool(self.state.get("collision")) else "OK"
+        source = "SLAM" if self.map_source == "slam_toolbox" else "PREVIEW"
+        painter.drawText(
+            20,
+            50,
+            f"TF {status}   {source} /map   {len(self.mapped_cells)} known",
+        )
 
         pose_text = f"{kind}   x {x:.2f}   y {y:.2f}   yaw {theta:.2f}"
         text_width = painter.fontMetrics().horizontalAdvance(pose_text) + 20
@@ -445,16 +928,17 @@ class SimCanvas(QWidget):
         painter.setPen(QColor("#b7c8da"))
         painter.drawText(20, self.height() - 19, pose_text)
 
-        origin = QPointF(self.width() - 48, self.height() - 42)
-        painter.setPen(QPen(QColor("#ff6b6b"), 2))
-        painter.drawLine(origin, origin + QPointF(22, 0))
-        painter.drawText(origin + QPointF(25, 4), "X")
-        painter.setPen(QPen(QColor("#55d187"), 2))
-        painter.drawLine(origin, origin + QPointF(-12, -16))
-        painter.drawText(origin + QPointF(-21, -18), "Y")
-        painter.setPen(QPen(QColor("#58a6ff"), 2))
-        painter.drawLine(origin, origin + QPointF(0, -24))
-        painter.drawText(origin + QPointF(4, -25), "Z")
+        if self.show_tf:
+            origin = QPointF(self.width() - 48, self.height() - 42)
+            painter.setPen(QPen(QColor("#ff6b6b"), 2))
+            painter.drawLine(origin, origin + QPointF(22, 0))
+            painter.drawText(origin + QPointF(25, 4), "X")
+            painter.setPen(QPen(QColor("#55d187"), 2))
+            painter.drawLine(origin, origin + QPointF(-12, -16))
+            painter.drawText(origin + QPointF(-21, -18), "Y")
+            painter.setPen(QPen(QColor("#58a6ff"), 2))
+            painter.drawLine(origin, origin + QPointF(0, -24))
+            painter.drawText(origin + QPointF(4, -25), "Z")
 
     def paintEvent(self, event) -> None:  # noqa: N802
         painter = QPainter(self)
@@ -474,13 +958,14 @@ class SimCanvas(QWidget):
                     self._project(-6, grid_value), self._project(6, grid_value)
                 )
 
-        axis_origin = self._project(0, 0, 0.02)
-        painter.setPen(QPen(QColor("#d75a64"), 2))
-        painter.drawLine(axis_origin, self._project(1.0, 0, 0.02))
-        painter.setPen(QPen(QColor("#4cb879"), 2))
-        painter.drawLine(axis_origin, self._project(0, 1.0, 0.02))
-        painter.setPen(QPen(QColor("#4f91d9"), 2))
-        painter.drawLine(axis_origin, self._project(0, 0, 1.0))
+        if self.show_tf:
+            axis_origin = self._project(0, 0, 0.02)
+            painter.setPen(QPen(QColor("#d75a64"), 2))
+            painter.drawLine(axis_origin, self._project(1.0, 0, 0.02))
+            painter.setPen(QPen(QColor("#4cb879"), 2))
+            painter.drawLine(axis_origin, self._project(0, 1.0, 0.02))
+            painter.setPen(QPen(QColor("#4f91d9"), 2))
+            painter.drawLine(axis_origin, self._project(0, 0, 1.0))
 
         if self.show_trail and len(self.trail) > 1:
             painter.setPen(QPen(QColor(77, 157, 224, 180), 2))
@@ -490,12 +975,53 @@ class SimCanvas(QWidget):
                     self._project(current[0], current[1], 0.035),
                 )
 
-        obstacles = self.state.get("obstacles") or DEFAULT_OBSTACLES
-        for obstacle in sorted(obstacles, key=lambda item: item[0] + item[1]):
-            ox, oy, half_w, half_h = [float(value) for value in obstacle]
-            self._draw_world_box(
-                painter, ox, oy, half_w, half_h, 0.42, QColor("#354960")
+        if self.mapping_active and self.show_map and self.mapped_cells:
+            origin_x, origin_y, origin_yaw = self.map_origin
+            cos_origin = math.cos(origin_yaw)
+            sin_origin = math.sin(origin_yaw)
+            base_point = self._project(origin_x, origin_y, 0.018)
+            next_point = self._project(
+                origin_x + self.map_resolution,
+                origin_y,
+                0.018,
             )
+            cell_size = max(
+                1.0,
+                min(
+                    4.0,
+                    math.hypot(
+                        next_point.x() - base_point.x(),
+                        next_point.y() - base_point.y(),
+                    ),
+                ),
+            )
+            for (cell_x, cell_y), occupancy in self.mapped_cells.items():
+                local_x = (cell_x + 0.5) * self.map_resolution
+                local_y = (cell_y + 0.5) * self.map_resolution
+                world_x = origin_x + local_x * cos_origin - local_y * sin_origin
+                world_y = origin_y + local_x * sin_origin + local_y * cos_origin
+                point = self._project(world_x, world_y, 0.018)
+                if occupancy >= 50:
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.setBrush(QColor(190, 202, 214, 220))
+                    painter.drawRect(
+                        QRectF(
+                            point.x() - cell_size / 2,
+                            point.y() - cell_size / 2,
+                            cell_size,
+                            cell_size,
+                        )
+                    )
+                else:
+                    painter.setPen(QPen(QColor(42, 82, 104, 115), 1))
+                    painter.drawPoint(point)
+        else:
+            obstacles = self.state.get("obstacles") or DEFAULT_OBSTACLES
+            for obstacle in sorted(obstacles, key=lambda item: item[0] + item[1]):
+                ox, oy, half_w, half_h = [float(value) for value in obstacle]
+                self._draw_world_box(
+                    painter, ox, oy, half_w, half_h, 0.42, QColor("#354960")
+                )
 
         x = float(self.state.get("x") or 0.0)
         y = float(self.state.get("y") or 0.0)
@@ -518,8 +1044,12 @@ class SimCanvas(QWidget):
                 painter.setPen(QPen(QColor(70, 210, 130, 68), 1))
 
         kind = str(self.state.get("kind") or "diff_drive_2w")
-        if kind == "simple_arm":
+        if not self.show_robot:
+            pass
+        elif kind == "simple_arm":
             self._draw_arm_3d(painter)
+        elif kind == "tricycle_3w":
+            self._draw_tricycle_3d(painter, x, y, theta)
         else:
             colors = {
                 "diff_drive_2w": QColor("#4da86d"),
@@ -528,7 +1058,13 @@ class SimCanvas(QWidget):
                 "ackermann_4w": QColor("#c49a45"),
                 "tricycle_3w": QColor("#8f70c5"),
             }
-            self._draw_robot_box(painter, x, y, theta, colors.get(kind, QColor("#4da86d")))
+            self._draw_robot_box(
+                painter,
+                x,
+                y,
+                theta,
+                colors.get(kind, QColor("#4da86d")),
+            )
         self._draw_overlay(painter)
 
 
@@ -848,6 +1384,7 @@ class WelcomePage(QFrame):
 
 class MainWindow(QMainWindow):
     docker_operation_finished = Signal(str, object, object)
+    docker_twist_finished = Signal(object)
 
     def __init__(
         self,
@@ -869,10 +1406,33 @@ class MainWindow(QMainWindow):
         self._all_dirs: list[str] = []
         self._ai_turns: list[tuple[str, str]] = []
         self._sim_running = False
+        self._simulation_open = False
+        self._simulation_selected_key: str | None = None
+        self._docker_operation_package_key: str | None = None
         self._resize_active = False
         self._docker_busy = False
         self._docker_last_result: dict | None = None
+        self._docker_status_cache: dict = {}
+        self._docker_twist_lock = threading.Lock()
+        self._docker_twist_pending: tuple[float, float, float] | None = None
+        self._docker_twist_worker_running = False
+        self._last_docker_twist_at = 0.0
+        self._drive_keys: set[int] = set()
+        self._auto_map_waypoint = 0
+        self._auto_map_waypoint_started_t = 0.0
+        self._auto_avoid_reverse_until = 0.0
+        self._auto_avoid_turn_until = 0.0
+        self._auto_avoid_direction = 1.0
+        self._slam_snapshot_cache: dict | None = None
+        self._slam_snapshot_mtime_ns = 0
+        self._slam_snapshot_applied_mtime_ns = 0
+        self._slam_snapshot_last_poll = 0.0
+        self._sim_snapshot_cache: dict | None = None
+        self._sim_snapshot_mtime_ns = 0
+        self._sim_snapshot_applied_mtime_ns = 0
+        self._sim_snapshot_last_poll = 0.0
         self.docker_operation_finished.connect(self._finish_docker_operation)
+        self.docker_twist_finished.connect(self._finish_docker_twist)
         self.setAcceptDrops(True)
 
         self.setWindowTitle(f"Lappa - ROS2 Package IDE - v{__version__}")
@@ -918,7 +1478,9 @@ class MainWindow(QMainWindow):
         self._resize_timer.setSingleShot(True)
         self._resize_timer.timeout.connect(self._finish_resize)
 
-        self._reload_workspace_packages(open_active=False)
+        saved_package = workspace.active_package()
+        saved_key = self._package_key(saved_package) if saved_package else None
+        self._reload_workspace_packages(keep_key=saved_key, open_active=False)
         self.pkg_combo.currentIndexChanged.connect(self._editor_load_current_package)
         self.file_filter.textChanged.connect(self._refresh_file_list)
         if self.pkg_combo.count():
@@ -1220,23 +1782,68 @@ class MainWindow(QMainWindow):
         top.addWidget(self.sim_state_pill)
         layout.addLayout(top)
 
+        self.sim_stack = QStackedWidget()
+        self.sim_stack.setObjectName("simStack")
+
+        self.sim_placeholder = QFrame()
+        self.sim_placeholder.setObjectName("simPlaceholder")
+        placeholder_layout = QVBoxLayout(self.sim_placeholder)
+        placeholder_layout.setContentsMargins(28, 28, 28, 28)
+        placeholder_layout.setSpacing(10)
+        placeholder_layout.addStretch(1)
+        placeholder_icon = QLabel()
+        placeholder_icon.setObjectName("simPlaceholderIcon")
+        placeholder_icon.setPixmap(_icon("play", "#93a4b8", "#38bdf8").pixmap(32, 32))
+        placeholder_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        placeholder_layout.addWidget(placeholder_icon)
+        self.sim_placeholder_title = QLabel("Simulation is not running")
+        self.sim_placeholder_title.setObjectName("simPlaceholderTitle")
+        self.sim_placeholder_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        placeholder_layout.addWidget(self.sim_placeholder_title)
+        self.sim_placeholder_package = QLabel("No package selected")
+        self.sim_placeholder_package.setObjectName("simPlaceholderPackage")
+        self.sim_placeholder_package.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        placeholder_layout.addWidget(self.sim_placeholder_package)
+        self.show_simulation_button = _button(
+            "Show Simulation",
+            primary=True,
+            tooltip="Build and launch this package in ROS2 Docker",
+        )
+        self.show_simulation_button.setIcon(_icon("play", "#e8f4ff", "#e8f4ff"))
+        self.show_simulation_button.setMaximumWidth(190)
+        self.show_simulation_button.clicked.connect(self._show_simulation)
+        placeholder_layout.addWidget(
+            self.show_simulation_button,
+            0,
+            Qt.AlignmentFlag.AlignHCenter,
+        )
+        placeholder_layout.addStretch(1)
+        self.sim_stack.addWidget(self.sim_placeholder)
+
+        self.sim_content_page = QWidget()
+        self.sim_content_page.setObjectName("simContentPage")
+        content_layout = QVBoxLayout(self.sim_content_page)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(10)
+        self.sim_stack.addWidget(self.sim_content_page)
+        layout.addWidget(self.sim_stack, 1)
+        layout = content_layout
+
         self.canvas = SimCanvas()
+        self.canvas.drive_key_pressed.connect(self._drive_key_pressed)
+        self.canvas.drive_key_released.connect(self._drive_key_released)
         view_bar = QHBoxLayout()
-        view_bar.setSpacing(8)
+        view_bar.setSpacing(6)
+        view_bar.addWidget(QLabel("Fixed Frame"))
+        self.fixed_frame_combo = QComboBox()
+        self.fixed_frame_combo.addItems(["map", "odom", "base_link"])
+        self.fixed_frame_combo.currentTextChanged.connect(self.canvas.set_fixed_frame)
+        view_bar.addWidget(self.fixed_frame_combo)
         view_bar.addWidget(QLabel("View"))
         self.sim_view_combo = QComboBox()
         self.sim_view_combo.addItems(["Orbit", "Top", "Follow"])
         self.sim_view_combo.currentTextChanged.connect(self.canvas.set_view_mode)
         view_bar.addWidget(self.sim_view_combo)
-        for text, callback in (
-            ("Grid", self.canvas.set_grid_visible),
-            ("Laser", self.canvas.set_laser_visible),
-            ("Trail", self.canvas.set_trail_visible),
-        ):
-            toggle = QCheckBox(text)
-            toggle.setChecked(True)
-            toggle.toggled.connect(callback)
-            view_bar.addWidget(toggle)
         view_bar.addStretch(1)
         reset_view = _toolbar_button("reset", "Reset camera", width=28)
         reset_view.clicked.connect(self.canvas.reset_view)
@@ -1248,11 +1855,11 @@ class MainWindow(QMainWindow):
         pose_card, self.pose_label = _metric("Pose")
         twist_card, self.lbl_twist = _metric("Twist")
         scan_card, self.scan_label = _metric("Scan")
-        reload_card, self.reload_label = _metric("Reloads")
+        map_card, self.map_cells_label = _metric("Map known")
         metrics.addWidget(pose_card, 0, 0)
         metrics.addWidget(twist_card, 0, 1)
-        metrics.addWidget(scan_card, 1, 0)
-        metrics.addWidget(reload_card, 1, 1)
+        metrics.addWidget(scan_card, 0, 2)
+        metrics.addWidget(map_card, 0, 3)
         layout.addLayout(metrics)
 
         controls = QFrame()
@@ -1280,12 +1887,59 @@ class MainWindow(QMainWindow):
         form.addRow("angular.z", self.sl_az)
         control_layout.addLayout(form)
 
+        keyboard_row = QHBoxLayout()
+        keyboard_row.setSpacing(5)
+        self.keyboard_toggle = QCheckBox("Keyboard")
+        self.keyboard_toggle.setChecked(True)
+        self.keyboard_toggle.setToolTip("Drive while the simulation viewport has focus")
+        self.keyboard_toggle.toggled.connect(self._set_keyboard_enabled)
+        keyboard_row.addWidget(self.keyboard_toggle)
+        self.drive_keycaps: dict[str, QLabel] = {}
+        for name, text in (
+            ("forward", "W / Up"),
+            ("left", "A / Left"),
+            ("reverse", "S / Down"),
+            ("right", "D / Right"),
+            ("brake", "Space"),
+        ):
+            keycap = QLabel(text)
+            keycap.setObjectName("driveKey")
+            keycap.setProperty("active", False)
+            keycap.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.drive_keycaps[name] = keycap
+            keyboard_row.addWidget(keycap)
+        keyboard_row.addStretch(1)
+        control_layout.addLayout(keyboard_row)
+
+        self.keyboard_status = QLabel("Native teleop ready")
+        self.keyboard_status.setObjectName("keyboardStatus")
+        mapping_row = QHBoxLayout()
+        mapping_row.addWidget(self.keyboard_status, 1)
+        self.auto_map_toggle = QCheckBox("Auto map")
+        self.auto_map_toggle.setToolTip(
+            "Drive the tricycle through mapping waypoints with its lidar"
+        )
+        self.auto_map_toggle.toggled.connect(self._set_auto_map_enabled)
+        mapping_row.addWidget(self.auto_map_toggle)
+        control_layout.addLayout(mapping_row)
+
+        self.slam_status_label = QLabel("SLAM Toolbox  waiting for Docker /map")
+        self.slam_status_label.setObjectName("slamStatus")
+        control_layout.addWidget(self.slam_status_label)
+        self.slam_progress = QProgressBar()
+        self.slam_progress.setObjectName("slamProgress")
+        self.slam_progress.setRange(0, 1000)
+        self.slam_progress.setValue(0)
+        self.slam_progress.setTextVisible(False)
+        self.slam_progress.setFixedHeight(5)
+        control_layout.addWidget(self.slam_progress)
+
         button_row = QHBoxLayout()
-        b_run = _button("Run", primary=True)
+        b_run = _button("Run", primary=True, tooltip="Restart simulation")
         b_run.clicked.connect(self.sim_run)
-        b_stop = _button("Stop")
+        b_stop = _button("Stop", tooltip="Stop ROS2 and close simulation")
         b_stop.clicked.connect(self.sim_stop)
-        b_zero = _button("Zero")
+        b_zero = _button("Zero", tooltip="Publish zero velocity")
         b_zero.clicked.connect(self.sim_zero)
         button_row.addWidget(b_run)
         button_row.addWidget(b_stop)
@@ -1293,11 +1947,53 @@ class MainWindow(QMainWindow):
         control_layout.addLayout(button_row)
         layout.addWidget(controls)
 
+        self.sim_tabs = QTabWidget()
+        self.sim_tabs.setObjectName("simTabs")
+        self.sim_tabs.setMinimumHeight(132)
+        self.sim_tabs.setMaximumHeight(142)
+
+        displays_page = QWidget()
+        displays_page.setObjectName("simTabPage")
+        displays_layout = QVBoxLayout(displays_page)
+        displays_layout.setContentsMargins(4, 4, 4, 4)
+        self.display_tree = QTreeWidget()
+        self.display_tree.setObjectName("displayTree")
+        self.display_tree.setHeaderLabels(["Display", "Topic / Frame"])
+        self.display_tree.setRootIsDecorated(False)
+        self.display_tree.setAlternatingRowColors(True)
+        self.display_items: dict[str, QTreeWidgetItem] = {}
+        for key, label, value in (
+            ("grid", "Grid", "1 m"),
+            ("robot", "RobotModel", "base_link"),
+            ("laser", "LaserScan", "/scan"),
+            ("map", "Map", "/map"),
+            ("tf", "TF", "map -> odom -> base_link"),
+            ("trail", "Path", "/trajectory"),
+        ):
+            item = QTreeWidgetItem([label, value])
+            item.setData(0, Qt.ItemDataRole.UserRole, key)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(0, Qt.CheckState.Checked)
+            self.display_items[key] = item
+            self.display_tree.addTopLevelItem(item)
+        self.display_tree.itemChanged.connect(self._display_tree_changed)
+        self.display_tree.header().setStretchLastSection(True)
+        self.display_tree.setColumnWidth(0, 118)
+        displays_layout.addWidget(self.display_tree)
+        self.sim_tabs.addTab(displays_page, "Displays")
+
+        log_page = QWidget()
+        log_page.setObjectName("simTabPage")
+        log_layout = QVBoxLayout(log_page)
+        log_layout.setContentsMargins(4, 4, 4, 4)
         self.sim_log = QTextEdit()
         self.sim_log.setObjectName("logBox")
         self.sim_log.setReadOnly(True)
-        self.sim_log.setMaximumHeight(110)
-        layout.addWidget(self.sim_log)
+        log_layout.addWidget(self.sim_log)
+        self.sim_tabs.addTab(log_page, "Log")
+        layout.addWidget(self.sim_tabs)
+        self.demo_combo.currentIndexChanged.connect(self._simulation_package_changed)
+        self._simulation_package_changed()
         return panel
 
     def _tab_ai(self) -> QWidget:
@@ -1701,12 +2397,17 @@ class MainWindow(QMainWindow):
         current = keep_key
         if not current and self._editor_pkg:
             current = self._package_key(self._editor_pkg)
+        if not current:
+            saved_package = workspace.active_package()
+            current = self._package_key(saved_package) if saved_package else None
         self.packages = workspace.workspace_packages()
         self._rebuild_package_index()
         if hasattr(self, "pkg_combo"):
             self._fill_package_combo(self.pkg_combo, current)
         if hasattr(self, "demo_combo"):
             self._fill_package_combo(self.demo_combo, current)
+            if hasattr(self, "auto_map_toggle"):
+                self._simulation_package_changed()
         if hasattr(self, "demo_list"):
             self.demo_list.clear()
             for pkg in self.packages:
@@ -2051,6 +2752,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:  # noqa: N802
         if self._confirm_editor_transition():
+            self.sim_zero()
             super().closeEvent(event)
         else:
             event.ignore()
@@ -2058,30 +2760,488 @@ class MainWindow(QMainWindow):
     def _editor_docker_launch(self) -> None:
         self._docker_launch_active()
 
-    def sim_zero(self) -> None:
-        self.sl_lx.setValue(0)
-        self.sl_ly.setValue(0)
-        self.sl_az.setValue(0)
+    def _set_simulation_open(self, opened: bool) -> None:
+        self._simulation_open = opened
+        self.sim_stack.setCurrentWidget(
+            self.sim_content_page if opened else self.sim_placeholder
+        )
+        if not opened:
+            self.sim_state_pill.setText("Idle")
 
-    def sim_run(self) -> None:
+    def _show_simulation(self, *_args) -> None:
         pkg = self._combo_package(self.demo_combo) or self._active_package()
-        demo = pkg.name if pkg else self._active_package_name()
-        path = pkg.path if pkg else None
-        SESSION.start(demo, path if path and path.is_dir() else None)
+        if pkg is None:
+            self._status("Select a ROS2 package before opening simulation")
+            return
+        self._set_simulation_open(True)
+        self._start_native_simulation(pkg)
+
+        session = self._docker_status_cache.get("session") or {}
+        if session.get("running") and session.get("demo") == pkg.name:
+            self.sim_state_pill.setText("Connecting")
+            self.keyboard_status.setText("Waiting for ROS2 telemetry")
+            self._status(f"Connecting simulation telemetry for {pkg.name}")
+            return
+        if self._docker_busy:
+            self.sim_state_pill.setText("Starting")
+            self.keyboard_status.setText("Waiting for Docker operation")
+            return
+        if not self._docker_status_cache.get("available"):
+            self.sim_state_pill.setText("Preview")
+            self.keyboard_status.setText("Native preview  Docker unavailable")
+            return
+        self.sim_state_pill.setText("Starting")
+        self.keyboard_status.setText("Building ROS2 package in Docker")
+        self._docker_launch_package(pkg)
+
+    def _start_native_simulation(self, pkg: RosPackage) -> None:
+        SESSION.start(pkg.name, pkg.path if pkg.path.is_dir() else None)
         self.canvas.clear_trail()
         self._sim_running = True
         self._timer.start(50)
-        self.sim_state_pill.setText("Running")
-        self.sim_log.append(f"native sim start: {demo}")
-        self._status(f"Running native simulation for {demo}")
+        self.sim_log.append(f"preview start: {pkg.name}")
+        self.canvas.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def sim_zero(self) -> None:
+        if hasattr(self, "auto_map_toggle") and self.auto_map_toggle.isChecked():
+            self.auto_map_toggle.blockSignals(True)
+            self.auto_map_toggle.setChecked(False)
+            self.auto_map_toggle.blockSignals(False)
+            self._queue_docker_auto_map(False)
+            self.canvas.set_mapping_active(False)
+        self._drive_keys.clear()
+        self.sl_lx.setValue(0)
+        self.sl_ly.setValue(0)
+        self.sl_az.setValue(0)
+        self._update_drive_keycaps()
+        self._queue_docker_twist(0.0, 0.0, 0.0)
+
+    def sim_run(self) -> None:
+        pkg = self._combo_package(self.demo_combo) or self._active_package()
+        if pkg is None:
+            return
+        if not self._simulation_open:
+            self._show_simulation()
+            return
+        self._start_native_simulation(pkg)
+        session = self._docker_status_cache.get("session") or {}
+        if session.get("running") and session.get("demo") == pkg.name:
+            self.sim_state_pill.setText("ROS2 Live")
+            self._status(f"Restarted simulation view for {pkg.name}")
+        elif not self._docker_busy and self._docker_status_cache.get("available"):
+            self.sim_state_pill.setText("Starting")
+            self._docker_launch_package(pkg)
+        else:
+            self.sim_state_pill.setText("Preview")
+            self._status(f"Running native preview for {pkg.name}")
 
     def sim_stop(self) -> None:
+        self.sim_zero()
         SESSION.stop()
         self._sim_running = False
         self._timer.stop()
-        self.sim_state_pill.setText("Idle")
-        self.sim_log.append("native sim stop")
+        self._set_simulation_open(False)
+        self.sim_log.append("simulation view closed")
         self._status("Simulation stopped")
+        session = self._docker_status_cache.get("session") or {}
+        if session.get("running") and not self._docker_busy:
+            self._run_docker_operation(
+                "Stopping ROS2 simulation",
+                docker_bridge.stop_launch,
+            )
+
+    def _set_keyboard_enabled(self, enabled: bool) -> None:
+        if not enabled:
+            self.sim_zero()
+            self.keyboard_status.setText("Keyboard teleop off")
+            return
+        self.keyboard_status.setText("Native teleop ready")
+        self.canvas.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _display_tree_changed(self, item: QTreeWidgetItem, _column: int) -> None:
+        key = str(item.data(0, Qt.ItemDataRole.UserRole) or "")
+        visible = item.checkState(0) == Qt.CheckState.Checked
+        callbacks = {
+            "grid": self.canvas.set_grid_visible,
+            "robot": self.canvas.set_robot_visible,
+            "laser": self.canvas.set_laser_visible,
+            "map": self.canvas.set_map_visible,
+            "tf": self.canvas.set_tf_visible,
+            "trail": self.canvas.set_trail_visible,
+        }
+        callback = callbacks.get(key)
+        if callback:
+            callback(visible)
+
+    def _simulation_package_changed(self, *_args) -> None:
+        if not hasattr(self, "auto_map_toggle"):
+            return
+        pkg = self._combo_package(self.demo_combo)
+        package_key = self._package_key(pkg) if pkg else None
+        previous_key = self._simulation_selected_key
+        self._simulation_selected_key = package_key
+        self.sim_placeholder_package.setText(
+            pkg.name if pkg else "No package selected"
+        )
+        self.show_simulation_button.setEnabled(pkg is not None)
+
+        if previous_key and previous_key != package_key:
+            if self.auto_map_toggle.isChecked():
+                self.auto_map_toggle.setChecked(False)
+            SESSION.stop()
+            self._sim_running = False
+            self._timer.stop()
+            self._drive_keys.clear()
+            self._update_drive_keycaps()
+            self._slam_snapshot_cache = None
+            self._slam_snapshot_applied_mtime_ns = 0
+            self._sim_snapshot_cache = None
+            self._sim_snapshot_applied_mtime_ns = 0
+            self.canvas.mapped_cells.clear()
+            self.canvas.clear_trail()
+            self._set_simulation_open(False)
+            self.sim_log.append("package changed; simulation view closed")
+            session = self._docker_status_cache.get("session") or {}
+            if session.get("running") and not self._docker_busy:
+                self._run_docker_operation(
+                    "Stopping previous ROS2 simulation",
+                    docker_bridge.stop_launch,
+                )
+        can_map = bool(pkg and pkg.name == "tricycle_3w")
+        if hasattr(self, "display_items") and pkg:
+            self.display_items["robot"].setText(1, f"{pkg.name}/base_link")
+        if not can_map and self.auto_map_toggle.isChecked():
+            self.auto_map_toggle.setChecked(False)
+        self.auto_map_toggle.setEnabled(can_map)
+        self.auto_map_toggle.setToolTip(
+            "Use lidar and SLAM Toolbox to build /map"
+            if can_map
+            else "Auto mapping is available for tricycle_3w"
+        )
+        if can_map:
+            self.slam_status_label.setText(
+                "SLAM Toolbox  starts with Show Simulation"
+            )
+        else:
+            self.slam_status_label.setText(
+                "ROS2 telemetry  starts with Show Simulation"
+            )
+            self.slam_progress.setValue(0)
+
+    def _set_auto_map_enabled(self, enabled: bool) -> None:
+        pkg = self._combo_package(self.demo_combo)
+        if enabled and (pkg is None or pkg.name != "tricycle_3w"):
+            self.auto_map_toggle.blockSignals(True)
+            self.auto_map_toggle.setChecked(False)
+            self.auto_map_toggle.blockSignals(False)
+            return
+        if enabled:
+            self._auto_map_waypoint = 0
+            self._auto_map_waypoint_started_t = 0.0
+            self._auto_avoid_reverse_until = 0.0
+            self._auto_avoid_turn_until = 0.0
+            if not self._sim_running:
+                self.sim_run()
+            self.keyboard_status.setText("Auto map  lidar + SLAM Toolbox")
+            self.sim_log.append("auto map start: lidar + waypoint exploration")
+            self.canvas.set_mapping_active(True)
+            self.sim_tabs.setCurrentIndex(0)
+            session = self._docker_status_cache.get("session") or {}
+            real_slam_running = bool(
+                session.get("running") and session.get("demo") == "tricycle_3w"
+            )
+            if real_slam_running:
+                self.slam_status_label.setText(
+                    "SLAM Toolbox  waiting for first /map snapshot"
+                )
+                self._queue_docker_auto_map(True)
+            elif self._docker_status_cache.get("daemon"):
+                self.slam_status_label.setText(
+                    "SLAM Toolbox  building ROS2 package in Docker"
+                )
+                self._docker_launch_active()
+            else:
+                self.slam_status_label.setText(
+                    "Native preview  Docker unavailable; /map is not ROS2 data"
+                )
+            self.canvas.setFocus(Qt.FocusReason.OtherFocusReason)
+            return
+        self._queue_docker_auto_map(False)
+        self.canvas.set_mapping_active(False)
+        self._slam_snapshot_cache = None
+        self._slam_snapshot_applied_mtime_ns = 0
+        self.slam_progress.setValue(0)
+        self.slam_status_label.setText("SLAM Toolbox  mapping stopped")
+        if not self._drive_keys:
+            self.sl_lx.setValue(0)
+            self.sl_az.setValue(0)
+            self._queue_docker_twist(0.0, 0.0, 0.0)
+        self.keyboard_status.setText("Native teleop ready")
+
+    def _drive_key_pressed(self, key: int) -> None:
+        if not self._simulation_open or not self.keyboard_toggle.isChecked():
+            return
+        self._drive_keys.add(key)
+        if not self._sim_running:
+            self.sim_run()
+        self._apply_keyboard_drive()
+
+    def _drive_key_released(self, key: int) -> None:
+        self._drive_keys.discard(key)
+        if self.keyboard_toggle.isChecked():
+            self._apply_keyboard_drive()
+
+    def _apply_keyboard_drive(self) -> None:
+        pressed = self._drive_keys
+        brake = Qt.Key.Key_Space.value in pressed
+        forward = bool({Qt.Key.Key_W.value, Qt.Key.Key_Up.value} & pressed)
+        reverse = bool({Qt.Key.Key_S.value, Qt.Key.Key_Down.value} & pressed)
+        left = bool({Qt.Key.Key_A.value, Qt.Key.Key_Left.value} & pressed)
+        right = bool({Qt.Key.Key_D.value, Qt.Key.Key_Right.value} & pressed)
+        linear_x = 0.0 if brake else (0.65 if forward else 0.0) + (-0.45 if reverse else 0.0)
+        steering = 0.0 if brake else (0.55 if left else 0.0) + (-0.55 if right else 0.0)
+        self.sl_lx.setValue(round(linear_x * 100))
+        self.sl_ly.setValue(0)
+        self.sl_az.setValue(round(steering * 100))
+        self._update_drive_keycaps()
+        self.keyboard_status.setText(
+            f"Native  speed {linear_x:+.2f}  steer {steering:+.2f}"
+        )
+        self._queue_docker_twist(linear_x, 0.0, steering)
+
+    def _update_drive_keycaps(self) -> None:
+        groups = {
+            "forward": {Qt.Key.Key_W.value, Qt.Key.Key_Up.value},
+            "reverse": {Qt.Key.Key_S.value, Qt.Key.Key_Down.value},
+            "left": {Qt.Key.Key_A.value, Qt.Key.Key_Left.value},
+            "right": {Qt.Key.Key_D.value, Qt.Key.Key_Right.value},
+            "brake": {Qt.Key.Key_Space.value},
+        }
+        for name, keys in groups.items():
+            label = self.drive_keycaps.get(name)
+            if label is None:
+                continue
+            label.setProperty("active", bool(keys & self._drive_keys))
+            label.style().unpolish(label)
+            label.style().polish(label)
+
+    def _queue_docker_twist(self, linear_x: float, linear_y: float, angular_z: float) -> None:
+        session = self._docker_status_cache.get("session") or {}
+        pkg = self._combo_package(self.demo_combo) or self._active_package()
+        demo = pkg.name if pkg else self._active_package_name()
+        if not session.get("running") or session.get("demo") != demo:
+            return
+        with self._docker_twist_lock:
+            self._last_docker_twist_at = time.monotonic()
+            self._docker_twist_pending = (linear_x, linear_y, angular_z)
+            if self._docker_twist_worker_running:
+                return
+            self._docker_twist_worker_running = True
+
+        def worker() -> None:
+            while True:
+                with self._docker_twist_lock:
+                    command = self._docker_twist_pending
+                    self._docker_twist_pending = None
+                    if command is None:
+                        self._docker_twist_worker_running = False
+                        return
+                result = docker_bridge.publish_twist(*command)
+                self.docker_twist_finished.emit(result)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _queue_docker_auto_map(self, enabled: bool) -> None:
+        session = self._docker_status_cache.get("session") or {}
+        if not session.get("running") or session.get("demo") != "tricycle_3w":
+            return
+        if enabled:
+            pkg = self._combo_package(self.demo_combo) or self._active_package()
+            if pkg is None or pkg.name != "tricycle_3w":
+                return
+
+        def worker() -> None:
+            result = docker_bridge.set_auto_explore(enabled)
+            self.docker_twist_finished.emit(result)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _finish_docker_twist(self, result: object) -> None:
+        if not isinstance(result, dict):
+            return
+        if result.get("control") == "auto_explore" and result.get("ok"):
+            if result.get("enabled"):
+                self.keyboard_status.setText("Auto map  Native + ROS2 SLAM")
+                self.slam_status_label.setText(
+                    "SLAM Toolbox  /scan active; waiting for /map"
+                )
+            else:
+                self.keyboard_status.setText("Auto mapping stopped")
+        elif result.get("ok"):
+            self.keyboard_status.setText("Native + ROS2 /cmd_vel")
+        elif result.get("error"):
+            self.keyboard_status.setText("Native teleop; ROS2 command failed")
+            self.keyboard_status.setToolTip(str(result["error"]))
+
+    def _slam_snapshot_path(self) -> Path | None:
+        package = self._combo_package(self.demo_combo) or self._active_package()
+        if package is None or package.name != "tricycle_3w":
+            return None
+        return package.path / ".lappa_runtime" / "slam_snapshot.json"
+
+    def _apply_latest_slam_snapshot(self) -> bool:
+        session = self._docker_status_cache.get("session") or {}
+        if not (
+            session.get("running")
+            and session.get("demo") == "tricycle_3w"
+        ):
+            self._slam_snapshot_cache = None
+            return False
+        now = time.monotonic()
+        if now - self._slam_snapshot_last_poll >= 0.2:
+            self._slam_snapshot_last_poll = now
+            path = self._slam_snapshot_path()
+            if path and path.is_file():
+                try:
+                    stat = path.stat()
+                    if stat.st_mtime_ns != self._slam_snapshot_mtime_ns:
+                        snapshot = json.loads(path.read_text(encoding="utf-8"))
+                        if snapshot.get("source") == "slam_toolbox":
+                            self._slam_snapshot_cache = snapshot
+                            self._slam_snapshot_mtime_ns = stat.st_mtime_ns
+                except (OSError, ValueError, TypeError):
+                    pass
+
+        snapshot = self._slam_snapshot_cache
+        if not snapshot:
+            return False
+        age = time.time() - float(snapshot.get("updated_at") or 0.0)
+        if age < -2.0 or age > 3.0:
+            self.slam_status_label.setText(
+                "SLAM Toolbox  waiting for a fresh /map snapshot"
+            )
+            return False
+
+        if self._slam_snapshot_applied_mtime_ns != self._slam_snapshot_mtime_ns:
+            self._slam_snapshot_applied_mtime_ns = self._slam_snapshot_mtime_ns
+            self.canvas.set_slam_snapshot(snapshot)
+            map_data = snapshot.get("map") or {}
+            width = int(map_data.get("width") or 0)
+            height = int(map_data.get("height") or 0)
+            resolution = float(map_data.get("resolution") or 0.0)
+            known = int(map_data.get("known_cells") or 0)
+            coverage = float(map_data.get("coverage_percent") or 0.0)
+            self.slam_progress.setValue(
+                round(max(0.0, min(100.0, coverage)) * 10)
+            )
+            self.slam_status_label.setText(
+                "SLAM Toolbox  LIVE  "
+                f"/map {width}x{height} @ {resolution:.2f} m  "
+                f"{coverage:.1f}% known"
+            )
+            self.map_cells_label.setText(f"{known:,}")
+            self.display_items["map"].setText(
+                1,
+                f"/map  {width}x{height} @ {resolution:.2f} m",
+            )
+            self.keyboard_status.setText(
+                "ROS2  /scan -> SLAM Toolbox -> /map"
+            )
+            self.sim_state_pill.setText("SLAM Live")
+
+            pose = snapshot.get("pose") or {}
+            twist = snapshot.get("twist") or {}
+            scan = snapshot.get("scan") or []
+            self.pose_label.setText(
+                f"x={float(pose.get('x') or 0.0):.2f} "
+                f"y={float(pose.get('y') or 0.0):.2f} "
+                f"th={float(pose.get('theta') or 0.0):.2f}"
+            )
+            self.lbl_twist.setText(
+                f"lx={float(twist.get('linear_x') or 0.0):.2f} "
+                f"az={float(twist.get('angular_z') or 0.0):.2f}"
+            )
+            self.scan_label.setText(f"{len(scan)} rays")
+        return True
+
+    def _simulation_snapshot_path(self, package: RosPackage) -> Path:
+        filename = (
+            "slam_snapshot.json"
+            if package.name == "tricycle_3w"
+            else "sim_snapshot.json"
+        )
+        return package.path / ".lappa_runtime" / filename
+
+    def _apply_latest_ros_snapshot(self) -> bool:
+        package = self._combo_package(self.demo_combo) or self._active_package()
+        if package is None:
+            return False
+        session = self._docker_status_cache.get("session") or {}
+        if not (
+            session.get("running")
+            and session.get("demo") == package.name
+        ):
+            return False
+        if package.name == "tricycle_3w":
+            return self._apply_latest_slam_snapshot()
+
+        now = time.monotonic()
+        if now - self._sim_snapshot_last_poll >= 0.2:
+            self._sim_snapshot_last_poll = now
+            path = self._simulation_snapshot_path(package)
+            if path.is_file():
+                try:
+                    stat = path.stat()
+                    if stat.st_mtime_ns != self._sim_snapshot_mtime_ns:
+                        snapshot = json.loads(path.read_text(encoding="utf-8"))
+                        if (
+                            snapshot.get("source") == "ros2"
+                            and snapshot.get("package") == package.name
+                        ):
+                            self._sim_snapshot_cache = snapshot
+                            self._sim_snapshot_mtime_ns = stat.st_mtime_ns
+                except (OSError, ValueError, TypeError):
+                    pass
+
+        snapshot = self._sim_snapshot_cache
+        if not snapshot:
+            return False
+        age = time.time() - float(snapshot.get("updated_at") or 0.0)
+        if age < -2.0 or age > 3.0:
+            self.keyboard_status.setText("Waiting for fresh ROS2 telemetry")
+            return False
+        if self._sim_snapshot_applied_mtime_ns == self._sim_snapshot_mtime_ns:
+            return True
+
+        self._sim_snapshot_applied_mtime_ns = self._sim_snapshot_mtime_ns
+        state = dict(snapshot.get("state") or {})
+        state["mode"] = "docker"
+        state["running"] = True
+        self.canvas.set_state(state)
+        twist = state.get("twist") or {}
+        lidar = state.get("lidar") or []
+        self.pose_label.setText(
+            f"x={float(state.get('x') or 0.0):.2f} "
+            f"y={float(state.get('y') or 0.0):.2f} "
+            f"th={float(state.get('theta') or 0.0):.2f}"
+        )
+        self.lbl_twist.setText(
+            f"lx={float(twist.get('linear_x') or 0.0):.2f} "
+            f"ly={float(twist.get('linear_y') or 0.0):.2f} "
+            f"az={float(twist.get('angular_z') or 0.0):.2f}"
+        )
+        self.scan_label.setText(f"{len(lidar)} rays" if lidar else "-")
+        self.map_cells_label.setText("-")
+        self.display_items["map"].setText(1, "not published")
+        topics = (
+            "/joint_states_array + /tip"
+            if package.name == "simple_arm"
+            else "/odom + /scan"
+        )
+        self.slam_status_label.setText(f"ROS2  LIVE  {topics}")
+        self.keyboard_status.setText("ROS2 telemetry connected")
+        self.sim_state_pill.setText("ROS2 Live")
+        return True
 
     def _tick_sim(self) -> None:
         if not self._sim_running:
@@ -2091,17 +3251,143 @@ class MainWindow(QMainWindow):
         lx = self.sl_lx.value() / 100.0
         ly = self.sl_ly.value() / 100.0
         az = self.sl_az.value() / 100.0
+        if self.auto_map_toggle.isChecked() and not self._drive_keys:
+            lx, az = self._native_auto_map_command()
+            self.sl_lx.setValue(round(lx * 100))
+            self.sl_ly.setValue(0)
+            self.sl_az.setValue(round(az * 100))
+            self.keyboard_status.setText("Auto map  lidar + trajectory")
+        if self._drive_keys and time.monotonic() - self._last_docker_twist_at >= 2.0:
+            self._queue_docker_twist(lx, ly, az)
         SESSION.cmd(lx, ly, az)
         state = SESSION.tick()
-        self.canvas.set_state(state)
-        self.pose_label.setText(
-            f"x={state.get('x', 0):.2f} y={state.get('y', 0):.2f} th={state.get('theta', 0):.2f}"
+        using_ros = bool(
+            self._simulation_open and self._apply_latest_ros_snapshot()
         )
-        self.lbl_twist.setText(f"lx={lx:.2f} ly={ly:.2f} az={az:.2f}")
-        lidar = state.get("lidar") or []
-        self.scan_label.setText(f"{len(lidar)} rays" if lidar else "-")
-        status = SESSION.status()
-        self.reload_label.setText(str(status.get("reload_count", 0)))
+        if not using_ros:
+            self.canvas.set_state(state)
+            self.pose_label.setText(
+                f"x={state.get('x', 0):.2f} y={state.get('y', 0):.2f} "
+                f"th={state.get('theta', 0):.2f}"
+            )
+            self.lbl_twist.setText(f"lx={lx:.2f} ly={ly:.2f} az={az:.2f}")
+            lidar = state.get("lidar") or []
+            self.scan_label.setText(f"{len(lidar)} rays" if lidar else "-")
+            self.map_cells_label.setText(str(len(self.canvas.mapped_cells)))
+        if not using_ros and state.get("collision"):
+            self.keyboard_status.setText("Blocked  footprint collision")
+
+    def _native_auto_map_command(self) -> tuple[float, float]:
+        state = self.canvas.state
+        x = float(state.get("x", 0.0))
+        y = float(state.get("y", 0.0))
+        theta = float(state.get("theta", 0.0))
+        sim_time = float(state.get("t", 0.0))
+        lidar = [float(value) for value in (state.get("lidar") or [])]
+        now = time.monotonic()
+        if lidar:
+            ray_count = len(lidar)
+
+            def sector(center: int, half_width: int) -> list[float]:
+                return [
+                    lidar[(center + offset) % ray_count]
+                    for offset in range(-half_width, half_width + 1)
+                ]
+
+            corridor_clearance = []
+            for index, distance in enumerate(lidar):
+                angle = (index / ray_count * math.tau + math.pi) % math.tau - math.pi
+                if (
+                    abs(angle) <= math.pi / 3
+                    and abs(distance * math.sin(angle)) <= 0.36
+                ):
+                    corridor_clearance.append(distance * math.cos(angle))
+            front = min(corridor_clearance, default=min(lidar))
+            left = sum(sector(ray_count // 8, ray_count // 36))
+            right = sum(sector(ray_count - ray_count // 8, ray_count // 36))
+            collision = bool(state.get("collision"))
+            previous_twist = state.get("twist") or {}
+            previous_speed = float(previous_twist.get("linear_x") or 0.0)
+            if collision and previous_speed < -0.01:
+                self._auto_avoid_direction = 1.0 if left >= right else -1.0
+                self._auto_avoid_reverse_until = now
+                self._auto_avoid_turn_until = now + 2.2
+                return self._safe_native_auto_command(
+                    0.16,
+                    self._auto_avoid_direction * 0.72,
+                )
+            should_recover = collision and now >= self._auto_avoid_reverse_until
+            if should_recover:
+                self._auto_avoid_direction = 1.0 if left >= right else -1.0
+                self._auto_avoid_reverse_until = now + 0.8
+                self._auto_avoid_turn_until = now + 2.0
+            elif front < 0.85 and now >= self._auto_avoid_turn_until:
+                self._auto_avoid_direction = 1.0 if left >= right else -1.0
+                self._auto_avoid_reverse_until = now
+                self._auto_avoid_turn_until = now + 1.6
+            if now < self._auto_avoid_reverse_until:
+                return self._safe_native_auto_command(-0.20, 0.0)
+            if now < self._auto_avoid_turn_until:
+                return self._safe_native_auto_command(
+                    0.18,
+                    self._auto_avoid_direction * 0.72,
+                )
+            if front < 1.2:
+                direction = 1.0 if left >= right else -1.0
+                return self._safe_native_auto_command(0.14, direction * 0.68)
+
+        target_x, target_y = AUTO_MAP_WAYPOINTS[self._auto_map_waypoint]
+        dx, dy = target_x - x, target_y - y
+        if (
+            math.hypot(dx, dy) < 0.35
+            or sim_time - self._auto_map_waypoint_started_t > 12.0
+        ):
+            self._auto_map_waypoint = (
+                self._auto_map_waypoint + 1
+            ) % len(AUTO_MAP_WAYPOINTS)
+            self._auto_map_waypoint_started_t = sim_time
+            target_x, target_y = AUTO_MAP_WAYPOINTS[self._auto_map_waypoint]
+            dx, dy = target_x - x, target_y - y
+        heading_error = (math.atan2(dy, dx) - theta + math.pi) % (
+            2 * math.pi
+        ) - math.pi
+        steering = max(-0.75, min(0.75, heading_error * 1.25))
+        speed = 0.34 if abs(heading_error) < 0.85 else 0.15
+        return self._safe_native_auto_command(speed, steering)
+
+    def _safe_native_auto_command(
+        self,
+        speed: float,
+        steering: float,
+    ) -> tuple[float, float]:
+        direction = 1.0 if steering >= 0 else -1.0
+        candidates = [
+            (speed, steering),
+            (0.13, direction * 0.72),
+            (0.13, -direction * 0.72),
+            (-0.16, 0.0),
+        ]
+        for candidate in candidates:
+            if self._native_motion_is_clear(*candidate):
+                return candidate
+        return 0.0, 0.0
+
+    def _native_motion_is_clear(self, speed: float, steering: float) -> bool:
+        state = self.canvas.state
+        x = float(state.get("x", 0.0))
+        y = float(state.get("y", 0.0))
+        theta = float(state.get("theta", 0.0))
+        obstacles = state.get("obstacles") or DEFAULT_OBSTACLES
+        for _ in range(8):
+            x += math.cos(theta) * speed * 0.1
+            y += math.sin(theta) * speed * 0.1
+            theta += (speed / 0.35) * math.tan(steering) * 0.1
+            for cx, cy, half_w, half_h in obstacles:
+                nearest_x = max(cx - half_w, min(x, cx + half_w))
+                nearest_y = max(cy - half_h, min(y, cy + half_h))
+                if (x - nearest_x) ** 2 + (y - nearest_y) ** 2 < 0.24**2:
+                    return False
+        return True
 
     def _selected_package_from_list(self) -> RosPackage | None:
         item = self.demo_list.currentItem()
@@ -2191,8 +3477,18 @@ class MainWindow(QMainWindow):
         self._run_docker_operation("Stopping Docker runtime", docker_bridge.stop_runtime)
 
     def _docker_launch_active(self) -> None:
-        pkg = self._active_package()
-        demo = pkg.name if pkg else self._active_package_name()
+        pkg = (
+            self._combo_package(self.demo_combo)
+            if self._simulation_open
+            else self._active_package()
+        )
+        if pkg is None:
+            self._status("No ROS2 package selected")
+            return
+        self._docker_launch_package(pkg)
+
+    def _docker_launch_package(self, pkg: RosPackage) -> None:
+        demo = pkg.name
         if pkg:
             try:
                 pkg.path.resolve().relative_to(DEMOS_ROOT.resolve())
@@ -2203,21 +3499,31 @@ class MainWindow(QMainWindow):
                 )
                 self._docker_last_result = {"ok": False, "error": msg}
                 self._refresh_docker()
+                if self._simulation_open:
+                    self.sim_state_pill.setText("Preview")
+                    self.keyboard_status.setText("Native preview  external package")
                 self._status(msg)
                 return
         self._run_docker_operation(
-            f"Building and launching {demo}", lambda: docker_bridge.launch_demo(demo)
+            f"Building and launching {demo}",
+            lambda: docker_bridge.launch_demo(demo),
+            package_key=self._package_key(pkg),
         )
 
     def _docker_stop_launch(self) -> None:
         self._run_docker_operation("Stopping ROS2 launch", docker_bridge.stop_launch)
 
     def _run_docker_operation(
-        self, label: str, operation: Callable[[], dict[str, object]]
+        self,
+        label: str,
+        operation: Callable[[], dict[str, object]],
+        *,
+        package_key: str | None = None,
     ) -> None:
         if self._docker_busy:
             return
         self._docker_busy = True
+        self._docker_operation_package_key = package_key
         self.docker_guidance.setText(f"{label}. This may take a few minutes on first build.")
         self._update_docker_buttons({})
 
@@ -2235,6 +3541,8 @@ class MainWindow(QMainWindow):
         threading.Thread(target=worker, daemon=True).start()
 
     def _finish_docker_operation(self, label: str, result: object, diagnostics: object) -> None:
+        operation_package_key = self._docker_operation_package_key
+        self._docker_operation_package_key = None
         self._docker_busy = False
         self._docker_last_result = result if isinstance(result, dict) else {"result": str(result)}
         status = diagnostics if isinstance(diagnostics, dict) else docker_bridge.status()
@@ -2248,6 +3556,30 @@ class MainWindow(QMainWindow):
             or (f"{label} complete" if ok else f"{label} failed")
         )
         self._status(str(message)[:160])
+        selected_pkg = self._combo_package(self.demo_combo)
+        selected_key = self._package_key(selected_pkg) if selected_pkg else None
+        stale_simulation_result = bool(
+            operation_package_key
+            and (
+                operation_package_key != selected_key
+                or not self._simulation_open
+            )
+        )
+        if stale_simulation_result:
+            if ok:
+                QTimer.singleShot(0, self._docker_stop_launch)
+            return
+        if operation_package_key and self._simulation_open:
+            if ok:
+                self.sim_state_pill.setText("Connecting")
+                self.keyboard_status.setText("Waiting for ROS2 telemetry")
+                self.sim_log.append(f"docker launch ready: {selected_pkg.name}")
+            else:
+                self.sim_state_pill.setText("Preview")
+                self.keyboard_status.setText("Native preview  ROS2 launch failed")
+                self.sim_log.append(f"docker launch failed: {message}")
+        if ok and self.auto_map_toggle.isChecked():
+            QTimer.singleShot(300, lambda: self._queue_docker_auto_map(True))
 
     @staticmethod
     def _docker_level(value: bool | None, *, warn_when_false: bool = False) -> str:
@@ -2285,6 +3617,7 @@ class MainWindow(QMainWindow):
         self.docker_down_button.setEnabled(not busy and running)
 
     def _apply_docker_status(self, status: dict) -> None:
+        self._docker_status_cache = dict(status)
         available = bool(status.get("available"))
         daemon = bool(status.get("daemon"))
         compose = bool(status.get("compose_available"))

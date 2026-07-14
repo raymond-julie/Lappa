@@ -27,6 +27,7 @@ class SimState:
     lidar: list[float] = field(default_factory=list)
     t: float = 0.0
     running: bool = False
+    collision: bool = False
     mode: str = "native"  # native | docker
     message: str = ""
 
@@ -46,6 +47,7 @@ class SimState:
             "lidar": [round(r, 3) for r in self.lidar],
             "t": round(self.t, 3),
             "running": self.running,
+            "collision": self.collision,
             "mode": self.mode,
             "message": self.message,
         }
@@ -57,6 +59,11 @@ def _wrap(a: float) -> float:
 
 # Simple axis-aligned obstacles in world frame (x, y, half_w, half_h)
 DEFAULT_OBSTACLES: list[tuple[float, float, float, float]] = [
+    # Bounded mapping room.
+    (0.0, 4.0, 4.08, 0.08),
+    (0.0, -4.0, 4.08, 0.08),
+    (4.0, 0.0, 0.08, 4.08),
+    (-4.0, 0.0, 0.08, 4.08),
     (2.0, 0.5, 0.35, 0.35),
     (-1.5, 1.2, 0.4, 0.25),
     (0.8, -1.8, 0.3, 0.5),
@@ -126,8 +133,23 @@ def _lidar_scan(
     return ranges
 
 
+def _circle_hits_aabb(
+    x: float,
+    y: float,
+    radius: float,
+    obstacle: tuple[float, float, float, float],
+) -> bool:
+    cx, cy, half_w, half_h = obstacle
+    nearest_x = max(cx - half_w, min(x, cx + half_w))
+    nearest_y = max(cy - half_h, min(y, cy + half_h))
+    return (x - nearest_x) ** 2 + (y - nearest_y) ** 2 < radius**2
+
+
 class BaseEngine:
     kind = "base"
+    lidar_rays = 36
+    lidar_range = 3.0
+    robot_radius = 0.2
 
     def __init__(self, demo: str):
         self.state = SimState(demo=demo, kind=self.kind)
@@ -158,12 +180,23 @@ class BaseEngine:
             self._integrate(dt)
             self.state.t += dt
             self.state.lidar = _lidar_scan(
-                self.state.x, self.state.y, self.state.theta, obstacles=self.obstacles
+                self.state.x,
+                self.state.y,
+                self.state.theta,
+                n=self.lidar_rays,
+                max_range=self.lidar_range,
+                obstacles=self.obstacles,
             )
         return self.state
 
     def _integrate(self, dt: float) -> None:
         raise NotImplementedError
+
+    def _pose_is_clear(self, x: float, y: float) -> bool:
+        return not any(
+            _circle_hits_aabb(x, y, self.robot_radius, obstacle)
+            for obstacle in self.obstacles
+        )
 
     def reset(self) -> None:
         demo, kind = self.state.demo, self.state.kind
@@ -220,17 +253,36 @@ class Omni3W(BaseEngine):
 
 class Tricycle3W(BaseEngine):
     kind = "tricycle_3w"
+    lidar_rays = 180
+    lidar_range = 8.0
+    robot_radius = 0.22
+
+    def __init__(self, demo: str):
+        super().__init__(demo)
+        self.state.joints = [0.0, 0.0, 0.0]
 
     def _integrate(self, dt: float) -> None:
         # linear_x = speed, angular_z treated as steering rate → curvature
         v = self.state.twist.linear_x
-        steer = max(-1.2, min(1.2, self.state.twist.angular_z))
+        steer = max(-0.75, min(0.75, self.state.twist.angular_z))
         L = 0.35  # wheelbase
         th = self.state.theta
-        self.state.x += v * math.cos(th) * dt
-        self.state.y += v * math.sin(th) * dt
-        if abs(L) > 1e-6:
-            self.state.theta = _wrap(th + (v / L) * math.tan(steer) * dt)
+        next_x = self.state.x + v * math.cos(th) * dt
+        next_y = self.state.y + v * math.sin(th) * dt
+        next_theta = _wrap(th + (v / L) * math.tan(steer) * dt)
+        self.state.joints[0] = steer
+        if not self._pose_is_clear(next_x, next_y):
+            self.state.collision = True
+            self.state.message = "footprint blocked by obstacle"
+            return
+        self.state.collision = False
+        self.state.message = "native sim running"
+        self.state.x = next_x
+        self.state.y = next_y
+        self.state.theta = next_theta
+        wheel_delta = (v / 0.13) * dt
+        self.state.joints[1] = _wrap(self.state.joints[1] + wheel_delta)
+        self.state.joints[2] = _wrap(self.state.joints[2] + wheel_delta)
 
 
 class Ackermann4W(BaseEngine):

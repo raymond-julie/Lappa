@@ -9,6 +9,8 @@ from __future__ import annotations
 import math
 import sys
 
+from .snapshot import SnapshotWriter
+
 
 def main() -> None:
     try:
@@ -28,6 +30,7 @@ def main() -> None:
         def __init__(self) -> None:
             super().__init__("teleop")
             self.kind = "ackermann"
+            self.snapshot = SnapshotWriter("ackermann_4w")
             self.x = 0.0
             self.y = 0.0
             self.th = 0.0
@@ -79,6 +82,24 @@ def main() -> None:
             base = 3.0 + 0.2 * math.sin(self.x + self.y)
             scan.ranges = [float(base + 0.05 * math.sin(i)) for i in range(n)]
             self.pub_scan.publish(scan)
+            self.snapshot.write(
+                {
+                    "demo": "ackermann_4w",
+                    "kind": "ackermann_4w",
+                    "x": self.x,
+                    "y": self.y,
+                    "theta": self.th,
+                    "joints": [],
+                    "twist": {
+                        "linear_x": vx,
+                        "linear_y": vy,
+                        "angular_z": wz,
+                    },
+                    "lidar": list(scan.ranges),
+                    "running": True,
+                    "mode": "docker",
+                }
+            )
 
     rclpy.init(args=sys.argv)
     node = TeleopNode()

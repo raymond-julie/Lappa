@@ -26,6 +26,10 @@ MESH_PRESETS = {
     "sphere": {"description": "Sphere"},
     "wheel": {"description": "Thin cylinder wheel (Y-axis spin)"},
     "chassis": {"description": "Mobile base plate (box)"},
+    "tricycle_chassis": {"description": "Y-frame tricycle chassis with equipment deck"},
+    "xe_tham_do_chassis": {
+        "description": "0.40 x 0.26 x 0.15 m chassis from TUPM96/xe_tham_do"
+    },
     "arm_link": {"description": "Elongated link for planar arm"},
     "lidar_dome": {"description": "Hemisphere sensor dome"},
 }
@@ -68,13 +72,32 @@ ROBOT_LAYOUTS: dict[str, dict[str, Any]] = {
         "lidar": {"xyz": [0.0, 0.0, 0.14], "radius": 0.035},
     },
     "tricycle_3w": {
-        "chassis": {"preset": "chassis", "size": [0.40, 0.28, 0.09], "xyz": [0.0, 0.0, 0.08]},
+        "chassis": {
+            "preset": "xe_tham_do_chassis",
+            "size": [0.40, 0.26, 0.15],
+            "xyz": [0.0, 0.0, 0.14],
+        },
         "wheels": [
-            {"name": "wheel_steer", "xyz": [0.16, 0.0, 0.05], "radius": 0.05, "width": 0.03},
-            {"name": "wheel_rear_l", "xyz": [-0.12, 0.12, 0.05], "radius": 0.05, "width": 0.03},
-            {"name": "wheel_rear_r", "xyz": [-0.12, -0.12, 0.05], "radius": 0.05, "width": 0.03},
+            {
+                "name": "wheel_steer",
+                "xyz": [0.25, 0.0, 0.085],
+                "radius": 0.085,
+                "width": 0.055,
+            },
+            {
+                "name": "wheel_rear_l",
+                "xyz": [-0.13, 0.15, 0.10],
+                "radius": 0.10,
+                "width": 0.055,
+            },
+            {
+                "name": "wheel_rear_r",
+                "xyz": [-0.13, -0.15, 0.10],
+                "radius": 0.10,
+                "width": 0.055,
+            },
         ],
-        "lidar": {"xyz": [0.08, 0.0, 0.15], "radius": 0.035},
+        "lidar": {"xyz": [0.0, 0.0, 0.30], "radius": 0.045},
     },
     "ackermann_4w": {
         "chassis": {"preset": "chassis", "size": [0.50, 0.32, 0.12], "xyz": [0.0, 0.0, 0.09]},
@@ -207,6 +230,122 @@ def _chassis(length: float, width: float, height: float) -> tuple[list[str], dic
     return _box(length, width, height)
 
 
+def _xe_tham_do_chassis(
+    length: float,
+    width: float,
+    height: float,
+) -> tuple[list[str], dict]:
+    lines, meta = _box(length, width, height)
+    meta.update(
+        {
+            "kind": "xe_tham_do_chassis",
+            "source": "https://github.com/TUPM96/xe_tham_do",
+        }
+    )
+    return lines, meta
+
+
+def _tricycle_chassis(
+    length: float,
+    width: float,
+    height: float,
+) -> tuple[list[str], dict]:
+    """Build a compact Y-frame inspired by full-size front-steer tricycles."""
+    vertices: list[tuple[float, float, float]] = []
+    faces: list[tuple[int, int, int, int]] = []
+
+    def add_box(
+        cx: float,
+        cy: float,
+        cz: float,
+        sx: float,
+        sy: float,
+        sz: float,
+        yaw: float = 0.0,
+    ) -> None:
+        hx, hy, hz = sx / 2, sy / 2, sz / 2
+        cos_yaw, sin_yaw = math.cos(yaw), math.sin(yaw)
+        first = len(vertices) + 1
+        for local_x, local_y, local_z in (
+            (-hx, -hy, -hz),
+            (hx, -hy, -hz),
+            (hx, hy, -hz),
+            (-hx, hy, -hz),
+            (-hx, -hy, hz),
+            (hx, -hy, hz),
+            (hx, hy, hz),
+            (-hx, hy, hz),
+        ):
+            vertices.append(
+                (
+                    cx + local_x * cos_yaw - local_y * sin_yaw,
+                    cy + local_x * sin_yaw + local_y * cos_yaw,
+                    cz + local_z,
+                )
+            )
+        for face in (
+            (0, 1, 2, 3),
+            (4, 7, 6, 5),
+            (0, 4, 5, 1),
+            (1, 5, 6, 2),
+            (2, 6, 7, 3),
+            (3, 7, 4, 0),
+        ):
+            faces.append(tuple(first + index for index in face))
+
+    def add_beam(
+        start: tuple[float, float],
+        end: tuple[float, float],
+        beam_width: float,
+        z: float,
+        beam_height: float,
+    ) -> None:
+        dx, dy = end[0] - start[0], end[1] - start[1]
+        add_box(
+            (start[0] + end[0]) / 2,
+            (start[1] + end[1]) / 2,
+            z,
+            math.hypot(dx, dy),
+            beam_width,
+            beam_height,
+            math.atan2(dy, dx),
+        )
+
+    rail_height = height * 0.28
+    rail_z = -height * 0.24
+    add_box(0.015, 0.0, rail_z, length * 0.82, width * 0.13, rail_height)
+    add_box(-length * 0.30, 0.0, rail_z, length * 0.12, width * 0.94, rail_height)
+    add_beam(
+        (-length * 0.31, width * 0.39),
+        (length * 0.34, width * 0.09),
+        width * 0.11,
+        rail_z,
+        rail_height,
+    )
+    add_beam(
+        (-length * 0.31, -width * 0.39),
+        (length * 0.34, -width * 0.09),
+        width * 0.11,
+        rail_z,
+        rail_height,
+    )
+
+    # A narrow electronics tray keeps the structural Y rails visible.
+    add_box(-length * 0.06, 0.0, 0.0, length * 0.42, width * 0.42, height * 0.18)
+    add_box(-length * 0.17, 0.0, height * 0.25, length * 0.25, width * 0.42, height * 0.28)
+    add_box(length * 0.40, 0.0, height * 0.03, length * 0.14, width * 0.28, height * 0.55)
+
+    lines = _obj_header("tricycle_chassis")
+    lines.extend(f"v {x:.5f} {y:.5f} {z:.5f}" for x, y, z in vertices)
+    lines.extend("f " + " ".join(str(index) for index in face) for face in faces)
+    return lines, {
+        "kind": "tricycle_chassis",
+        "size": [length, width, height],
+        "vertices": len(vertices),
+        "components": 7,
+    }
+
+
 def _arm_link(length: float, thickness: float) -> tuple[list[str], dict]:
     return _box(length, thickness, thickness)
 
@@ -258,6 +397,10 @@ def generate_mesh(
         lines, meta = _cylinder(radius, height, segments, axis="y")
     elif p == "chassis":
         lines, meta = _chassis(sx, sy, sz)
+    elif p == "tricycle_chassis":
+        lines, meta = _tricycle_chassis(sx, sy, sz)
+    elif p == "xe_tham_do_chassis":
+        lines, meta = _xe_tham_do_chassis(sx, sy, sz)
     elif p == "arm_link":
         lines, meta = _arm_link(length, thickness)
     elif p == "lidar_dome":
@@ -571,7 +714,7 @@ def write_robot_urdf(
 ) -> Path:
     urdf_path.parent.mkdir(parents=True, exist_ok=True)
     body = f"""<?xml version="1.0"?>
-<!-- Lappa aligned 3D robot — package {package_name} -->
+<!-- Lappa aligned 3D robot - package {package_name} -->
 <robot name="{package_name}">
 {links_and_joints_xml}
 </robot>

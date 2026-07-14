@@ -66,6 +66,17 @@ def test_fit_obj_to_box():
     assert "v " in fitted
 
 
+def test_tricycle_uses_xe_tham_do_chassis_dimensions():
+    text, meta = models3d.generate_mesh(
+        "xe_tham_do_chassis", sx=0.40, sy=0.26, sz=0.15
+    )
+    bounds = models3d.mesh_bounds(text)
+    assert meta["kind"] == "xe_tham_do_chassis"
+    assert meta["source"].endswith("TUPM96/xe_tham_do")
+    assert bounds["vertices"] == 8
+    assert bounds["size"] == [0.4, 0.26, 0.15]
+
+
 def test_build_aligned_robot_diff_drive():
     result = models3d.build_aligned_robot("diff_drive_2w")
     assert result["ok"]

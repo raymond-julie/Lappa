@@ -4,6 +4,8 @@ from __future__ import annotations
 import math
 import sys
 
+from .snapshot import SnapshotWriter
+
 
 def main() -> None:
     try:
@@ -21,6 +23,7 @@ def main() -> None:
     class ArmNode(Node):
         def __init__(self) -> None:
             super().__init__("teleop")
+            self.snapshot = SnapshotWriter("simple_arm")
             self.j0 = 0.4
             self.j1 = -0.6
             self.t = 0.0
@@ -46,6 +49,24 @@ def main() -> None:
             tip.point.y = y
             tip.point.z = 0.0
             self.pub_tip.publish(tip)
+            self.snapshot.write(
+                {
+                    "demo": "simple_arm",
+                    "kind": "simple_arm",
+                    "x": x,
+                    "y": y,
+                    "theta": 0.0,
+                    "joints": [self.j0, self.j1],
+                    "twist": {
+                        "linear_x": 0.0,
+                        "linear_y": 0.0,
+                        "angular_z": 0.0,
+                    },
+                    "lidar": [],
+                    "running": True,
+                    "mode": "docker",
+                }
+            )
 
     rclpy.init(args=sys.argv)
     node = ArmNode()

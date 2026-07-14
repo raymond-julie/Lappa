@@ -94,7 +94,7 @@ lappa gui
 | **Workspace** | Add folders/packages, refresh scan, open package roots discovered by `package.xml` |
 | **Editor** | **Open package files, edit, save** from the active workspace package |
 | **3D view** | Mesh/URDF files open as text + preview in one resizable editor pane |
-| **Simulation** | Start/stop **native** sim, teleop, RViz-style viewport, lidar, trajectory |
+| **Simulation** | On-demand ROS2 launch, teleop, RViz-style viewport, lidar, map, TF, and trajectory |
 | **3D models** | Build aligned multi-link robot meshes for a demo package |
 | **Packages** | List / create colcon-ready zip bundles |
 | **ROS2 / Docker** | Distro select, start container, **launch package sim in Docker** |
@@ -109,9 +109,13 @@ lappa gui
 ### Desktop polish
 
 - Branded Lappa app icon for the Qt window, taskbar, and Windows release executable.
-- Compact IDE layout: activity rail, Explorer tree, center editor, bottom AI Assistant, right live simulation.
+- Compact IDE layout: activity rail, Explorer tree, center editor, bottom AI Assistant, and an on-demand simulation pane on the right.
 - First-run Welcome screen for opening a workspace, ROS package, or bundled sample package.
-- RViz-style native viewport with orbit/top/follow cameras, grid, lidar, trajectory, and obstacles.
+- The right pane remains idle until **Show Simulation** is clicked; changing packages closes the current session before another package can be launched.
+- RViz-style viewport with orbit/top/follow cameras, grid, lidar, trajectory, obstacles, and live ROS2 telemetry.
+- Keyboard teleop (`WASD` / arrows, `Space` brake) drives native simulation and forwards `/cmd_vel` to the active ROS2 Docker launch.
+- Tricycle mapping demo with a source-derived Xacro chassis, 180-ray lidar, TF, collision-aware autonomous exploration, and ROS2 SLAM Toolbox `/map` output.
+- Every bundled mobile/arm demo publishes a runtime snapshot from its real ROS2 Docker node back into the IDE viewport.
 - Layered Docker diagnostics for CLI, engine, Compose, image, container health, and ROS2 launch.
 - Resizable panes without live repaint flicker while dragging splitters.
 - OBJ/STL/DAE/URDF files open as text plus a 3D/structure preview in the same editor pane.
@@ -124,7 +128,18 @@ lappa gui
 <p align="center">
   <img src="docs/screenshots/gui-sim.png" alt="Lappa GUI — Simulation" width="100%" />
 </p>
-<p align="center"><em>RViz-style native simulation viewport</em></p>
+<p align="center"><em>RViz-style simulation viewport beside the editor and AI assistant</em></p>
+
+### Tricycle SLAM demo
+
+<p align="center">
+  <a href="docs/assets/lappa-tricycle-slam-demo.mp4">
+    <img src="docs/assets/lappa-tricycle-slam-demo.gif" alt="Lappa tricycle SLAM mapping demo" width="100%" />
+  </a>
+</p>
+<p align="center"><em>ROS2 Humble tricycle auto-mapping with 180-ray lidar, collision-safe navigation, TF, and RViz-style Orbit / Follow / Top views. Click the animation for the full MP4.</em></p>
+
+The tricycle Xacro is adapted from [TUPM96/xe_tham_do](https://github.com/TUPM96/xe_tham_do). The warehouse ground-truth occupancy map is sourced from the BSD-licensed [Clearpath Nav2 demos](https://github.com/clearpathrobotics/clearpath_nav2_demos/tree/jazzy/maps); SLAM Toolbox still reconstructs and publishes the displayed `/map` during the run.
 
 <p align="center">
   <img src="docs/screenshots/gui-demos.png" alt="Lappa GUI — Workspace" width="100%" />
@@ -245,11 +260,11 @@ Each entry under `packages/demos/` is a **ROS2-style package** (`package.xml`, `
 | --- | --- | --- | --- |
 | `diff_drive_2w` | Differential drive | Chassis + L/R wheels + lidar | Classic mobile base |
 | `omni_3w` | Holonomic 3-wheel | Chassis + 3 wheels @ 120° + lidar | Strafe + rotate |
-| `tricycle_3w` | Tricycle | Chassis + steer + rear pair + lidar | Steering geometry |
+| `tricycle_3w` | Tricycle | Xacro chassis + steer + rear pair + lidar | SLAM Toolbox warehouse mapping + collision-aware exploration |
 | `ackermann_4w` | Ackermann car-like | Chassis + 4 wheels + lidar | Wheelbase + steer |
 | `simple_arm` | Planar 2-DOF | Base + link1 + link2 | Joint angles / FK tip |
 
-Sim state includes `x, y, theta`, `twist`, synthetic `lidar` (with obstacles), and **`joints`**.
+Offline sim state includes `x, y, theta`, `twist`, synthetic `lidar`, and **`joints`**. When a bundled package is launched through Docker, the same viewport switches to snapshots published by its real ROS2 node; `tricycle_3w` additionally streams SLAM Toolbox `/map`, `/scan`, and `/odom`.
 
 | | |
 | :---: | :---: |
@@ -365,6 +380,8 @@ Docker is **not** a thin shell — it **loads a real ROS2 distro**, **colcon-bui
 ros2 launch <package> sim.launch.py
 ```
 
+In the IDE, select a package and click **Show Simulation**. Lappa prepares Docker, colcon-builds that package, starts its launch file, and connects the right viewport to its telemetry. The pane is not started at application launch, and selecting another package first tears down the current launch.
+
 The IDE reports each Docker layer separately so setup failures are actionable:
 
 | Status | Meaning | IDE action |
@@ -379,9 +396,10 @@ The IDE reports each Docker layer separately so setup failures are actionable:
 | Step | What happens |
 | --- | --- |
 | 1. IDE edit | `packages/demos/<pkg>/…` (Qt Editor) |
-| 2. `lappa docker start` | Image: `/opt/ros/$DISTRO` + colcon + rclpy/launch; mount demos → `/ws/src` |
-| 3. `lappa docker launch -d <pkg>` | `colcon build --packages-select <pkg>` → `source install` → **`ros2 launch <pkg> sim.launch.py`** |
-| 4. Topics | Real ROS2 nodes: `/cmd_vel`, `/odom`, `/scan` (or arm joints) |
+| 2. Show Simulation | The selected package owns the right viewport; no package is launched implicitly |
+| 3. Docker prepare | Image: `/opt/ros/$DISTRO` + colcon + rclpy/launch; demos are mounted into `/ws/src` |
+| 4. Build + launch | `colcon build --packages-select <pkg>` then **`ros2 launch <pkg> sim.launch.py`** |
+| 5. Live bridge | ROS2 `/odom`, `/scan`, `/map`, TF, or arm joint state is rendered in the IDE |
 
 ```powershell
 lappa docker start                          # build/start ROS2 container
