@@ -21,9 +21,15 @@ DEST="$OUT/lappa-linux-x64"
 cp "$BIN" "$DEST"
 chmod +x "$DEST"
 
-# smoke
-"$DEST" version || true
-"$DEST" demo || true
+# CLI smoke must succeed before an artifact is accepted.
+"$DEST" version
+"$DEST" demo
+rm -rf "$OUT/lappa_data"
+
+(
+  cd "$OUT"
+  sha256sum lappa-linux-x64 > SHA256SUMS.txt
+)
 
 echo "OK: $DEST"
-ls -lh "$DEST"
+ls -lh "$DEST" "$OUT/SHA256SUMS.txt"

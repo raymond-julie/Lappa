@@ -15,7 +15,29 @@ permissions:
   contents: write
 
 jobs:
+  quality:
+    runs-on: ubuntu-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: |
+          cd packages/server
+          python -m pip install -U pip
+          python -m pip install -e ".[dev,gui]"
+      - name: Lint and test
+        run: |
+          cd packages/server
+          python -m ruff check src tests scripts
+          python -m pytest -q
+          python -m compileall -q src tests scripts
+
   build-windows:
+    needs: quality
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,6 +62,7 @@ jobs:
           if-no-files-found: error
 
   build-linux:
+    needs: quality
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

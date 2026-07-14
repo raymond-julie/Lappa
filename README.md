@@ -5,7 +5,7 @@
 </p>
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![Version](https://img.shields.io/badge/version-0.4.29-0E8A16.svg)](packages/server/pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.4.30-0E8A16.svg)](packages/server/pyproject.toml)
 [![GUI-PySide6](https://img.shields.io/badge/GUI-PySide6-41CD52.svg)](packages/server/src/lappa/gui/)
 [![ROS2](https://img.shields.io/badge/ROS2-Humble%20%7C%20Jazzy%20%7C%20Rolling-22314E.svg)](https://docs.ros.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -26,6 +26,7 @@
 ## Table of contents
 
 - [Highlights](#highlights)
+- [System requirements](#system-requirements)
 - [Desktop GUI (Qt) — primary](#desktop-gui-qt--primary)
 - [Quick start](#quick-start)
 - [CLI reference](#cli-reference)
@@ -60,6 +61,19 @@
 
 ---
 
+## System requirements
+
+| Mode | Requirements |
+| --- | --- |
+| **Release binary** | Windows 10/11 x64 or Linux x64 (glibc) |
+| **Source install** | Python 3.11+ and PySide6 6.6+ |
+| **Native simulation** | No ROS2 or Docker installation required |
+| **Real ROS2 launch** | Docker Desktop on Windows, or Docker Engine + Compose on Linux |
+
+The first ROS2 image build needs an internet connection and several gigabytes of free disk space. Editing, workspace management, 3D preview, and native simulation remain available when Docker is missing or stopped.
+
+---
+
 ## Desktop GUI (Qt) — primary
 
 Lappa’s product surface is a **PySide6** desktop app. Use this path for day-to-day work.
@@ -80,22 +94,37 @@ lappa gui
 | **Workspace** | Add folders/packages, refresh scan, open package roots discovered by `package.xml` |
 | **Editor** | **Open package files, edit, save** from the active workspace package |
 | **3D view** | Mesh/URDF files open as text + preview in one resizable editor pane |
-| **Simulation** | Start/stop **native** sim, teleop, 2D canvas + lidar, trajectory |
+| **Simulation** | Start/stop **native** sim, teleop, RViz-style viewport, lidar, trajectory |
 | **3D models** | Build aligned multi-link robot meshes for a demo package |
 | **Packages** | List / create colcon-ready zip bundles |
 | **ROS2 / Docker** | Distro select, start container, **launch package sim in Docker** |
+
+### First launch
+
+1. Choose **Open Workspace** for a ROS workspace or folder containing multiple packages.
+2. Choose **Open ROS Package** for one folder containing `package.xml`.
+3. Use **New Empty Workspace** to start with an empty root list.
+4. Open the Welcome screen again from the activity rail or with `Ctrl+Shift+H`.
 
 ### Desktop polish
 
 - Branded Lappa app icon for the Qt window, taskbar, and Windows release executable.
 - Compact IDE layout: activity rail, Explorer tree, center editor, bottom AI Assistant, right live simulation.
+- First-run Welcome screen for opening a workspace, ROS package, or bundled sample package.
+- RViz-style native viewport with orbit/top/follow cameras, grid, lidar, trajectory, and obstacles.
+- Layered Docker diagnostics for CLI, engine, Compose, image, container health, and ROS2 launch.
 - Resizable panes without live repaint flicker while dragging splitters.
 - OBJ/STL/DAE/URDF files open as text plus a 3D/structure preview in the same editor pane.
 
 <p align="center">
+  <img src="docs/screenshots/gui-welcome.png" alt="Lappa GUI - Welcome" width="100%" />
+</p>
+<p align="center"><em>First-run workspace entry</em></p>
+
+<p align="center">
   <img src="docs/screenshots/gui-sim.png" alt="Lappa GUI — Simulation" width="100%" />
 </p>
-<p align="center"><em>Simulation — native kinematics canvas</em></p>
+<p align="center"><em>RViz-style native simulation viewport</em></p>
 
 <p align="center">
   <img src="docs/screenshots/gui-demos.png" alt="Lappa GUI — Workspace" width="100%" />
@@ -172,7 +201,7 @@ lappa serve --port 8840   # optional local FastAPI automation API
 
 | Command | Description |
 | --- | --- |
-| `lappa version` | Package version (**0.4.29**) |
+| `lappa version` | Package version (**0.4.30**) |
 | `lappa demo` | Offline smoke: engines + 3D robot + bundle + trajectory |
 | `lappa gui` / **`lappa-gui`** | **Qt desktop app** (needs `.[gui]`) |
 | `lappa demos list` | List robot demos |
@@ -298,6 +327,8 @@ In **Qt → ROS2 / Docker**, pick the distro. Starting Docker regenerates `packa
 
 Base URL when you intentionally run the local automation API with `lappa serve`: `http://127.0.0.1:8840`
 
+Lappa does not ship a browser or web frontend. This loopback API is an optional headless integration surface; the product UI is the Qt desktop IDE.
+
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/health` | Health + version + demos |
@@ -320,7 +351,9 @@ Prefer the **Qt desktop IDE** for day-to-day package work; the API is for automa
 
 ---
 
-## Docker · load ROS2 + run package via colcon
+## Docker (optional)
+
+### Load ROS2 and run packages with colcon
 
 Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Linux Docker).
 
@@ -329,6 +362,17 @@ Docker is **not** a thin shell — it **loads a real ROS2 distro**, **colcon-bui
 ```bash
 ros2 launch <package> sim.launch.py
 ```
+
+The IDE reports each Docker layer separately so setup failures are actionable:
+
+| Status | Meaning | IDE action |
+| --- | --- | --- |
+| `Missing` | Docker CLI is not installed | Shows the Docker Desktop install action |
+| `Engine stopped` | CLI exists but the daemon is unavailable | Shows **Open Docker Desktop** |
+| `Image not built` | Engine works but the selected ROS2 image is absent | **Start** builds the selected distro |
+| `Starting` | Container healthcheck is pending | Launch stays disabled and status refreshes automatically |
+| `Healthy` | ROS2, Compose, image, and container are ready | Active bundled package can be built and launched |
+| `Unhealthy` | Container failed its ROS2 healthcheck | Rebuild guidance and diagnostics remain visible |
 
 | Step | What happens |
 | --- | --- |
@@ -363,12 +407,13 @@ Without Docker, **native kinematics sim** still runs offline (`lappa sim start`)
 
 ## Download binaries
 
-GitHub Releases may ship standalone builds:
+Download [Lappa v0.4.30](https://github.com/mergeos-bounties/Lappa/releases/tag/v0.4.30) from GitHub Releases:
 
 | File | Platform |
 | --- | --- |
 | `lappa-windows-x64.exe` | Windows 10/11 x64 |
 | `lappa-linux-x64` | Linux x64 |
+| `SHA256SUMS.txt` | SHA-256 checksums for release verification |
 
 ```powershell
 .\lappa-windows-x64.exe demo

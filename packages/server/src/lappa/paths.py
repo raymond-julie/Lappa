@@ -46,6 +46,23 @@ def _copy_tree_if_needed(src: Path, dst: Path) -> None:
     shutil.copytree(src, dst)
 
 
+def _sync_managed_tree(src: Path, dst: Path, *, preserve: set[str]) -> None:
+    """Refresh app-managed runtime files without replacing user-owned state."""
+    if not src.is_dir():
+        return
+    dst.mkdir(parents=True, exist_ok=True)
+    for source in src.rglob("*"):
+        relative = source.relative_to(src)
+        if relative.as_posix() in preserve:
+            continue
+        target = dst / relative
+        if source.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+
+
 def ensure_runtime_layout() -> dict[str, Path]:
     """
     Resolve demos / docker / workspaces.
@@ -63,6 +80,11 @@ def ensure_runtime_layout() -> dict[str, Path]:
         docker = home / "docker"
         _copy_tree_if_needed(bundled_demos, demos)
         _copy_tree_if_needed(bundled_docker, docker)
+        _sync_managed_tree(
+            bundled_docker,
+            docker,
+            preserve={"Dockerfile", "ros2_distro.txt"},
+        )
         workspaces = home / "workspaces"
     else:
         packages = bundle  # packages/

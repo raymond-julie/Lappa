@@ -26,7 +26,7 @@ if [ -f /ws/install/setup.bash ]; then
 fi
 
 if [ -d /ws/src ]; then
-  echo "[lappa] package sources at /ws/src (IDE live edit → colcon build → ros2 launch)"
+  echo "[lappa] package sources at /ws/src (IDE live edit -> colcon build -> ros2 launch)"
   ls -1 /ws/src 2>/dev/null | head -20 || true
 fi
 

@@ -14,12 +14,17 @@ OUT.mkdir(parents=True, exist_ok=True)
 
 def main() -> None:
     from PySide6.QtCore import QTimer
+    from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication
 
+    from lappa.gui.app import app_icon_path
     from lappa.gui.main_window import MainWindow
 
     app = QApplication(sys.argv)
-    win = MainWindow()
+    icon_path = app_icon_path()
+    if icon_path.is_file():
+        app.setWindowIcon(QIcon(str(icon_path)))
+    win = MainWindow(show_welcome=False)
     win.show()
     app.processEvents()
     # start a short sim for trail
@@ -28,6 +33,7 @@ def main() -> None:
     win.sl_az.setValue(30)
 
     shots = [
+        ("gui-welcome.png", "welcome"),
         ("gui-sim.png", "sim"),
         ("gui-demos.png", "demos"),
         ("gui-models.png", "models"),

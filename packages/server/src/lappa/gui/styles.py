@@ -7,8 +7,77 @@ STYLESHEET = """
   color: #e6edf3;
 }
 
-QMainWindow, QWidget#central {
+QMainWindow, QWidget#central, QWidget#workbenchPage {
   background: #0b1020;
+}
+
+QFrame#welcomePage {
+  background: #080d18;
+}
+
+QFrame#welcomeStage, QFrame#welcomeActions {
+  background: transparent;
+}
+
+QLabel#welcomeIcon {
+  background: transparent;
+}
+
+QLabel#welcomeBrand {
+  color: #f8fafc;
+  font-size: 19px;
+  font-weight: 800;
+}
+
+QLabel#welcomeProduct, QLabel#welcomeVersion, QLabel#welcomeMeta {
+  color: #7f91a8;
+  font-size: 11px;
+}
+
+QLabel#welcomeProduct {
+  font-weight: 700;
+}
+
+QLabel#welcomeTitle {
+  color: #f8fafc;
+  font-size: 30px;
+  font-weight: 700;
+}
+
+QLabel#welcomeSubtitle {
+  color: #9fb4cc;
+  font-size: 13px;
+}
+
+QFrame#welcomeWorkspacePanel {
+  background: #0f172a;
+  border: 1px solid #263449;
+  border-radius: 8px;
+}
+
+QLabel#welcomeWorkspaceName {
+  color: #f8fafc;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+QLabel#welcomeRoot {
+  color: #8fa6bf;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 11px;
+}
+
+QPushButton#welcomeAction {
+  min-width: 290px;
+  padding: 9px 13px;
+  text-align: left;
+}
+
+QListWidget#welcomePackageList {
+  background: #0b1220;
+  border: 1px solid #223049;
+  border-radius: 5px;
+  padding: 4px;
 }
 
 QFrame#topbar {
@@ -98,6 +167,41 @@ QFrame#metricCard, QFrame#controlPanel {
   background: #111827;
   border: 1px solid #263449;
   border-radius: 8px;
+}
+
+QFrame#dockerDiagnosticPanel {
+  background: #0b1220;
+  border: 1px solid #263449;
+  border-radius: 5px;
+}
+
+QLabel#dockerStatusName {
+  color: #8293a8;
+  font-size: 11px;
+}
+
+QLabel#dockerStatusValue {
+  color: #91a4ba;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+QLabel#dockerStatusValue[statusLevel="ok"] {
+  color: #55d187;
+}
+
+QLabel#dockerStatusValue[statusLevel="warn"] {
+  color: #e7b84b;
+}
+
+QLabel#dockerStatusValue[statusLevel="error"] {
+  color: #ff7b72;
+}
+
+QLabel#dockerGuidance {
+  color: #b8c8da;
+  padding: 2px 0;
 }
 
 QLabel#metricValue {

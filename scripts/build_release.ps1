@@ -30,12 +30,16 @@ if (-not (Test-Path $exe)) { throw "Build failed: missing $exe" }
 $dest = Join-Path $OutDir "lappa-windows-x64.exe"
 Copy-Item $exe $dest -Force
 
-# quick smoke
+# CLI smoke must succeed before an artifact is accepted.
 & $dest version
-if ($LASTEXITCODE -ne 0) {
-  # desktop entry may not forward 'version' the same — try cli mode
-  & $dest version 2>$null
-}
+if ($LASTEXITCODE -ne 0) { throw "Release smoke failed: version command" }
+
+$runtimeData = Join-Path $OutDir "lappa_data"
+if (Test-Path $runtimeData) { Remove-Item -LiteralPath $runtimeData -Recurse -Force }
+
+$hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $dest).Hash.ToLowerInvariant()
+$checksum = Join-Path $OutDir "SHA256SUMS.txt"
+Set-Content -LiteralPath $checksum -Encoding ascii -Value "$hash  lappa-windows-x64.exe"
 
 Write-Host "OK: $dest"
-Get-Item $dest | Format-List Name, Length, FullName
+Get-Item $dest, $checksum | Format-Table Name, Length, FullName -AutoSize

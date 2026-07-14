@@ -131,7 +131,9 @@ class SimSession:
             self.trajectory.append(row)
             if len(self.trajectory) > 5000:
                 self.trajectory = self.trajectory[-5000:]
-            return st.to_dict()
+            result = st.to_dict()
+            result["obstacles"] = [list(obstacle) for obstacle in self.engine.obstacles]
+            return result
 
     def status(self) -> dict[str, Any]:
         with self._lock:

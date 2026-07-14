@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import json
 import math
+import threading
+from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QSize, Qt, QTimer
+from PySide6.QtCore import QPointF, QSettings, QSize, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import (
     QAction,
     QBrush,
     QColor,
+    QDesktopServices,
     QFont,
     QFontDatabase,
     QIcon,
@@ -17,9 +21,12 @@ from PySide6.QtGui import (
     QPainter,
     QPen,
     QPixmap,
+    QPolygonF,
 )
 from PySide6.QtWidgets import (
     QComboBox,
+    QCheckBox,
+    QApplication,
     QFileDialog,
     QFormLayout,
     QFrame,
@@ -36,6 +43,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSlider,
     QSplitter,
+    QStackedWidget,
     QStatusBar,
     QTabWidget,
     QTextEdit,
@@ -50,7 +58,11 @@ from lappa import __version__, docker_bridge, models3d, packager, ros2_versions,
 from lappa.config import DEMOS_ROOT, ensure_dirs
 from lappa.gui.styles import STYLESHEET
 from lappa.package_loader import RosPackage, load_package, read_file, write_file
+from lappa.sim.engines import DEFAULT_OBSTACLES
 from lappa.sim.session import SESSION
+
+
+WELCOME_SETTINGS_KEY = "onboarding/welcome_seen"
 
 
 def _button(text: str, *, primary: bool = False, compact: bool = False) -> QPushButton:
@@ -197,7 +209,7 @@ def _metric(title: str) -> tuple[QFrame, QLabel]:
 
 
 class SimCanvas(QWidget):
-    """2D top-down simulator viewport."""
+    """Interactive RViz-style viewport for the native simulator."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -214,6 +226,14 @@ class SimCanvas(QWidget):
             "running": False,
         }
         self.trail: list[tuple[float, float]] = []
+        self.view_mode = "Orbit"
+        self.camera_yaw = math.radians(-42)
+        self.zoom = 1.0
+        self.show_grid = True
+        self.show_laser = True
+        self.show_trail = True
+        self._drag_position: QPointF | None = None
+        self.setMouseTracking(True)
 
     def set_state(self, st: dict) -> None:
         self.state = st or self.state
@@ -228,130 +248,288 @@ class SimCanvas(QWidget):
         self.trail.clear()
         self.update()
 
+    def set_view_mode(self, mode: str) -> None:
+        self.view_mode = mode if mode in {"Orbit", "Top", "Follow"} else "Orbit"
+        if self.view_mode == "Top":
+            self.camera_yaw = 0.0
+        elif self.view_mode == "Orbit":
+            self.camera_yaw = math.radians(-42)
+        self.update()
+
+    def reset_view(self) -> None:
+        self.zoom = 1.0
+        self.camera_yaw = 0.0 if self.view_mode == "Top" else math.radians(-42)
+        self.update()
+
+    def set_grid_visible(self, visible: bool) -> None:
+        self.show_grid = visible
+        self.update()
+
+    def set_laser_visible(self, visible: bool) -> None:
+        self.show_laser = visible
+        self.update()
+
+    def set_trail_visible(self, visible: bool) -> None:
+        self.show_trail = visible
+        self.update()
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton and self.view_mode != "Top":
+            self._drag_position = event.position()
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        if self._drag_position is not None:
+            delta = event.position() - self._drag_position
+            self.camera_yaw += delta.x() * 0.008
+            self._drag_position = event.position()
+            self.update()
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton and self._drag_position is not None:
+            self._drag_position = None
+            self.unsetCursor()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def wheelEvent(self, event) -> None:  # noqa: N802
+        factor = 1.1 if event.angleDelta().y() > 0 else 1 / 1.1
+        self.zoom = min(2.4, max(0.55, self.zoom * factor))
+        self.update()
+        event.accept()
+
+    def _project(self, x: float, y: float, z: float = 0.0) -> QPointF:
+        focus_x = float(self.state.get("x") or 0.0) if self.view_mode == "Follow" else 0.0
+        focus_y = float(self.state.get("y") or 0.0) if self.view_mode == "Follow" else 0.0
+        dx, dy = x - focus_x, y - focus_y
+        scale = min(self.width(), self.height()) / 8.2 * self.zoom
+        cx = self.width() * 0.5
+        if self.view_mode == "Top":
+            cy = self.height() * 0.52
+            return QPointF(cx + dx * scale, cy - dy * scale - z * scale * 0.12)
+        side = dx * math.cos(self.camera_yaw) - dy * math.sin(self.camera_yaw)
+        depth = dx * math.sin(self.camera_yaw) + dy * math.cos(self.camera_yaw)
+        return QPointF(
+            cx + side * scale,
+            self.height() * 0.56 + depth * scale * 0.48 - z * scale * 0.92,
+        )
+
+    @staticmethod
+    def _shade(color: QColor, factor: float) -> QColor:
+        return QColor(
+            max(0, min(255, int(color.red() * factor))),
+            max(0, min(255, int(color.green() * factor))),
+            max(0, min(255, int(color.blue() * factor))),
+            color.alpha(),
+        )
+
+    def _draw_world_box(
+        self,
+        painter: QPainter,
+        cx: float,
+        cy: float,
+        half_w: float,
+        half_h: float,
+        height: float,
+        color: QColor,
+    ) -> None:
+        bottom = [
+            self._project(cx - half_w, cy - half_h),
+            self._project(cx + half_w, cy - half_h),
+            self._project(cx + half_w, cy + half_h),
+            self._project(cx - half_w, cy + half_h),
+        ]
+        top = [
+            self._project(cx - half_w, cy - half_h, height),
+            self._project(cx + half_w, cy - half_h, height),
+            self._project(cx + half_w, cy + half_h, height),
+            self._project(cx - half_w, cy + half_h, height),
+        ]
+        painter.setPen(QPen(self._shade(color, 1.25), 1))
+        for index in range(4):
+            face = QPolygonF(
+                [bottom[index], bottom[(index + 1) % 4], top[(index + 1) % 4], top[index]]
+            )
+            painter.setBrush(self._shade(color, 0.62 + index * 0.07))
+            painter.drawPolygon(face)
+        painter.setBrush(color)
+        painter.drawPolygon(QPolygonF(top))
+
+    @staticmethod
+    def _robot_world_point(
+        x: float,
+        y: float,
+        theta: float,
+        local_x: float,
+        local_y: float,
+    ) -> tuple[float, float]:
+        cos_t, sin_t = math.cos(theta), math.sin(theta)
+        return (
+            x + local_x * cos_t - local_y * sin_t,
+            y + local_x * sin_t + local_y * cos_t,
+        )
+
+    def _draw_robot_box(
+        self,
+        painter: QPainter,
+        x: float,
+        y: float,
+        theta: float,
+        color: QColor,
+    ) -> None:
+        locals_ = [(-0.34, -0.23), (0.34, -0.23), (0.34, 0.23), (-0.34, 0.23)]
+        world = [self._robot_world_point(x, y, theta, px, py) for px, py in locals_]
+        bottom = [self._project(px, py, 0.05) for px, py in world]
+        top = [self._project(px, py, 0.32) for px, py in world]
+        painter.setPen(QPen(self._shade(color, 1.28), 1))
+        for index in range(4):
+            painter.setBrush(self._shade(color, 0.58 + index * 0.08))
+            painter.drawPolygon(
+                QPolygonF(
+                    [bottom[index], bottom[(index + 1) % 4], top[(index + 1) % 4], top[index]]
+                )
+            )
+        painter.setBrush(color)
+        painter.drawPolygon(QPolygonF(top))
+        nose = self._robot_world_point(x, y, theta, 0.52, 0.0)
+        painter.setPen(QPen(QColor("#d7f2ff"), 2))
+        painter.drawLine(self._project(x, y, 0.36), self._project(*nose, 0.36))
+        painter.setBrush(QColor("#d7f2ff"))
+        painter.drawEllipse(self._project(*nose, 0.36), 2.5, 2.5)
+
+    def _draw_arm_3d(self, painter: QPainter) -> None:
+        joints = self.state.get("joints") or [0.4, -0.6]
+        j0 = float(joints[0]) if joints else 0.4
+        j1 = float(joints[1]) if len(joints) > 1 else -0.6
+        base = (0.0, 0.0, 0.26)
+        elbow = (0.64 * math.cos(j0), 0.0, 0.34 + 0.64 * math.sin(j0))
+        tool = (
+            elbow[0] + 0.48 * math.cos(j0 + j1),
+            0.0,
+            elbow[2] + 0.48 * math.sin(j0 + j1),
+        )
+        self._draw_world_box(painter, 0.0, 0.0, 0.28, 0.28, 0.24, QColor("#3e7cb8"))
+        painter.setPen(QPen(QColor("#a987e8"), 7, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.drawLine(self._project(*base), self._project(*elbow))
+        painter.drawLine(self._project(*elbow), self._project(*tool))
+        painter.setBrush(QColor("#65b7ef"))
+        painter.setPen(QPen(QColor("#d7f2ff"), 1))
+        for point in (base, elbow, tool):
+            painter.drawEllipse(self._project(*point), 5, 5)
+
+    def _draw_overlay(self, painter: QPainter) -> None:
+        kind = str(self.state.get("kind") or "diff_drive_2w")
+        x = float(self.state.get("x") or 0.0)
+        y = float(self.state.get("y") or 0.0)
+        theta = float(self.state.get("theta") or 0.0)
+        painter.setFont(QFont("Segoe UI", 9))
+        painter.setPen(QColor("#b7c8da"))
+        painter.setBrush(QColor(8, 15, 27, 220))
+        painter.drawRoundedRect(10, 10, 210, 48, 4, 4)
+        painter.drawText(20, 30, f"Fixed Frame: map    View: {self.view_mode}")
+        painter.setPen(QColor("#7f94aa"))
+        painter.drawText(20, 49, "Native kinematics | 1 m grid")
+
+        pose_text = f"{kind}   x {x:.2f}   y {y:.2f}   yaw {theta:.2f}"
+        text_width = painter.fontMetrics().horizontalAdvance(pose_text) + 20
+        painter.setBrush(QColor(8, 15, 27, 220))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRoundedRect(10, self.height() - 38, text_width, 28, 4, 4)
+        painter.setPen(QColor("#b7c8da"))
+        painter.drawText(20, self.height() - 19, pose_text)
+
+        origin = QPointF(self.width() - 48, self.height() - 42)
+        painter.setPen(QPen(QColor("#ff6b6b"), 2))
+        painter.drawLine(origin, origin + QPointF(22, 0))
+        painter.drawText(origin + QPointF(25, 4), "X")
+        painter.setPen(QPen(QColor("#55d187"), 2))
+        painter.drawLine(origin, origin + QPointF(-12, -16))
+        painter.drawText(origin + QPointF(-21, -18), "Y")
+        painter.setPen(QPen(QColor("#58a6ff"), 2))
+        painter.drawLine(origin, origin + QPointF(0, -24))
+        painter.drawText(origin + QPointF(4, -25), "Z")
+
     def paintEvent(self, event) -> None:  # noqa: N802
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        w, h = self.width(), self.height()
-        painter.fillRect(0, 0, w, h, QColor("#08111f"))
+        painter.fillRect(self.rect(), QColor("#07101c"))
+        painter.fillRect(0, int(self.height() * 0.43), self.width(), self.height(), QColor("#0a1624"))
 
-        grid_pen = QPen(QColor("#1d2b3d"))
-        grid_pen.setWidth(1)
-        painter.setPen(grid_pen)
-        for x in range(0, w, 36):
-            painter.drawLine(x, 0, x, h)
-        for y in range(0, h, 36):
-            painter.drawLine(0, y, w, y)
-
-        cx, cy = w / 2, h / 2
-        scale = min(w, h) / 6.4
-
-        axis_pen = QPen(QColor("#31435d"))
-        axis_pen.setWidth(2)
-        painter.setPen(axis_pen)
-        painter.drawLine(QPointF(0, cy), QPointF(w, cy))
-        painter.drawLine(QPointF(cx, 0), QPointF(cx, h))
-
-        if len(self.trail) > 1:
-            trail_pen = QPen(QColor(56, 139, 253, 150))
-            trail_pen.setWidth(2)
-            painter.setPen(trail_pen)
-            for i in range(1, len(self.trail)):
-                x0, y0 = self.trail[i - 1]
-                x1, y1 = self.trail[i]
+        if self.show_grid:
+            for grid_value in range(-6, 7):
+                major = grid_value == 0
+                color = QColor("#31455d") if major else QColor("#17283a")
+                painter.setPen(QPen(color, 2 if major else 1))
                 painter.drawLine(
-                    QPointF(cx + x0 * scale, cy - y0 * scale),
-                    QPointF(cx + x1 * scale, cy - y1 * scale),
+                    self._project(grid_value, -6), self._project(grid_value, 6)
                 )
+                painter.drawLine(
+                    self._project(-6, grid_value), self._project(6, grid_value)
+                )
+
+        axis_origin = self._project(0, 0, 0.02)
+        painter.setPen(QPen(QColor("#d75a64"), 2))
+        painter.drawLine(axis_origin, self._project(1.0, 0, 0.02))
+        painter.setPen(QPen(QColor("#4cb879"), 2))
+        painter.drawLine(axis_origin, self._project(0, 1.0, 0.02))
+        painter.setPen(QPen(QColor("#4f91d9"), 2))
+        painter.drawLine(axis_origin, self._project(0, 0, 1.0))
+
+        if self.show_trail and len(self.trail) > 1:
+            painter.setPen(QPen(QColor(77, 157, 224, 180), 2))
+            for previous, current in zip(self.trail, self.trail[1:]):
+                painter.drawLine(
+                    self._project(previous[0], previous[1], 0.035),
+                    self._project(current[0], current[1], 0.035),
+                )
+
+        obstacles = self.state.get("obstacles") or DEFAULT_OBSTACLES
+        for obstacle in sorted(obstacles, key=lambda item: item[0] + item[1]):
+            ox, oy, half_w, half_h = [float(value) for value in obstacle]
+            self._draw_world_box(
+                painter, ox, oy, half_w, half_h, 0.42, QColor("#354960")
+            )
 
         x = float(self.state.get("x") or 0.0)
         y = float(self.state.get("y") or 0.0)
         theta = float(self.state.get("theta") or 0.0)
-        rx, ry = cx + x * scale, cy - y * scale
-
         lidar = self.state.get("lidar") or []
-        if lidar:
-            painter.setPen(QPen(QColor(63, 185, 80, 60), 1))
-            for i, r in enumerate(lidar):
-                angle = theta + (i / len(lidar)) * math.pi * 2
-                lx = rx + math.cos(angle) * float(r) * scale * 0.35
-                ly = ry - math.sin(angle) * float(r) * scale * 0.35
-                painter.drawLine(QPointF(rx, ry), QPointF(lx, ly))
+        if self.show_laser and lidar:
+            sensor = self._project(x, y, 0.38)
+            painter.setPen(QPen(QColor(70, 210, 130, 68), 1))
+            for index, distance in enumerate(lidar):
+                angle = theta + index / len(lidar) * math.tau
+                endpoint = (
+                    x + math.cos(angle) * float(distance),
+                    y + math.sin(angle) * float(distance),
+                )
+                projected = self._project(*endpoint, 0.05)
+                painter.drawLine(sensor, projected)
+                painter.setBrush(QColor("#4bd487"))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawEllipse(projected, 1.8, 1.8)
+                painter.setPen(QPen(QColor(70, 210, 130, 68), 1))
 
-        painter.save()
-        painter.translate(rx, ry)
-        painter.rotate(-math.degrees(theta))
-        kind = self.state.get("kind") or "diff_drive_2w"
+        kind = str(self.state.get("kind") or "diff_drive_2w")
         if kind == "simple_arm":
-            self._draw_arm(painter)
-        elif kind == "omni_3w":
-            self._draw_omni(painter)
-        elif kind == "ackermann_4w":
-            self._draw_car(painter, QColor("#e3b341"))
-        elif kind == "tricycle_3w":
-            self._draw_tricycle(painter)
+            self._draw_arm_3d(painter)
         else:
-            self._draw_diff(painter)
-        painter.restore()
-
-        painter.setPen(QColor("#9fb3c8"))
-        painter.setFont(QFont("Segoe UI", 9))
-        painter.drawText(14, 22, f"{kind}  x={x:.2f}  y={y:.2f}  theta={theta:.2f}")
-
-    def _draw_diff(self, painter: QPainter) -> None:
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QBrush(QColor("#44c767")))
-        painter.drawRoundedRect(-20, -14, 40, 28, 5, 5)
-        painter.setBrush(QBrush(QColor("#0b0f17")))
-        painter.drawRoundedRect(-16, -20, 12, 7, 3, 3)
-        painter.drawRoundedRect(-16, 13, 12, 7, 3, 3)
-        painter.setPen(QPen(QColor("#f8fafc"), 2))
-        painter.drawLine(0, 0, 28, 0)
-
-    def _draw_omni(self, painter: QPainter) -> None:
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QBrush(QColor("#388bfd")))
-        painter.drawEllipse(QPointF(0, 0), 22, 22)
-        painter.setBrush(QBrush(QColor("#dbeafe")))
-        for i in range(3):
-            angle = i * math.tau / 3
-            painter.drawEllipse(QPointF(math.cos(angle) * 20, math.sin(angle) * 20), 5, 5)
-        painter.setPen(QPen(QColor("#ffffff"), 2))
-        painter.drawLine(0, 0, 30, 0)
-
-    def _draw_tricycle(self, painter: QPainter) -> None:
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QBrush(QColor("#a371f7")))
-        points = [QPointF(24, 0), QPointF(-18, -16), QPointF(-18, 16)]
-        painter.drawPolygon(points)
-        painter.setPen(QPen(QColor("#ffffff"), 2))
-        painter.drawLine(0, 0, 30, 0)
-
-    def _draw_car(self, painter: QPainter, color: QColor) -> None:
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QBrush(color))
-        painter.drawRoundedRect(-28, -15, 56, 30, 5, 5)
-        painter.setBrush(QBrush(QColor("#0b0f17")))
-        for wx, wy in [(-18, -20), (-18, 14), (18, -20), (18, 14)]:
-            painter.drawRoundedRect(wx - 5, wy, 10, 6, 2, 2)
-        painter.setPen(QPen(QColor("#ffffff"), 2))
-        painter.drawLine(0, 0, 34, 0)
-
-    def _draw_arm(self, painter: QPainter) -> None:
-        joints = self.state.get("joints") or [0.4, -0.6]
-        j0 = float(joints[0]) if joints else 0.4
-        j1 = float(joints[1]) if len(joints) > 1 else -0.6
-        x1, y1 = 68 * math.cos(j0), -68 * math.sin(j0)
-        x2 = x1 + 52 * math.cos(j0 + j1)
-        y2 = y1 - 52 * math.sin(j0 + j1)
-        arm_pen = QPen(QColor("#a371f7"), 7)
-        arm_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        painter.setPen(arm_pen)
-        painter.drawLine(QPointF(0, 0), QPointF(x1, y1))
-        painter.drawLine(QPointF(x1, y1), QPointF(x2, y2))
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QBrush(QColor("#58a6ff")))
-        for px, py in [(0, 0), (x1, y1), (x2, y2)]:
-            painter.drawEllipse(QPointF(px, py), 6, 6)
+            colors = {
+                "diff_drive_2w": QColor("#4da86d"),
+                "omni_3w": QColor("#3f83cc"),
+                "mecanum_4w": QColor("#4f8fcf"),
+                "ackermann_4w": QColor("#c49a45"),
+                "tricycle_3w": QColor("#8f70c5"),
+            }
+            self._draw_robot_box(painter, x, y, theta, colors.get(kind, QColor("#4da86d")))
+        self._draw_overlay(painter)
 
 
 class ModelPreview(QWidget):
@@ -496,10 +674,191 @@ class ModelPreview(QWidget):
             painter.drawPoint(project(vertex))
 
 
-class MainWindow(QMainWindow):
+class WelcomePage(QFrame):
+    """First-run entry point for opening a ROS workspace."""
+
+    open_workspace_requested = Signal()
+    open_package_requested = Signal()
+    new_workspace_requested = Signal()
+    continue_requested = Signal()
+    package_requested = Signal(str)
+
     def __init__(self) -> None:
         super().__init__()
+        self.setObjectName("welcomePage")
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(44, 32, 44, 32)
+        outer.setSpacing(0)
+        outer.addStretch(1)
+
+        stage = QFrame()
+        stage.setObjectName("welcomeStage")
+        stage.setMaximumWidth(980)
+        stage_layout = QVBoxLayout(stage)
+        stage_layout.setContentsMargins(0, 0, 0, 0)
+        stage_layout.setSpacing(24)
+
+        brand_row = QHBoxLayout()
+        brand_row.setSpacing(12)
+        icon_label = QLabel()
+        icon_label.setObjectName("welcomeIcon")
+        icon_label.setFixedSize(48, 48)
+        app = QApplication.instance()
+        icon = app.windowIcon() if app else QIcon()
+        if not icon.isNull():
+            icon_label.setPixmap(icon.pixmap(48, 48))
+        brand_row.addWidget(icon_label)
+
+        brand_stack = QVBoxLayout()
+        brand_stack.setSpacing(0)
+        brand = QLabel("Lappa")
+        brand.setObjectName("welcomeBrand")
+        product = QLabel("ROS2 PACKAGE IDE")
+        product.setObjectName("welcomeProduct")
+        brand_stack.addWidget(brand)
+        brand_stack.addWidget(product)
+        brand_row.addLayout(brand_stack)
+        brand_row.addStretch(1)
+        version = QLabel(f"Version {__version__}")
+        version.setObjectName("welcomeVersion")
+        brand_row.addWidget(version, 0, Qt.AlignmentFlag.AlignTop)
+        stage_layout.addLayout(brand_row)
+
+        headline = QLabel("Start with a ROS2 workspace")
+        headline.setObjectName("welcomeTitle")
+        subtitle = QLabel(
+            "Open package source, inspect robot models, and run simulation in one workbench."
+        )
+        subtitle.setObjectName("welcomeSubtitle")
+        subtitle.setWordWrap(True)
+        stage_layout.addWidget(headline)
+        stage_layout.addWidget(subtitle)
+
+        columns = QHBoxLayout()
+        columns.setSpacing(34)
+
+        actions = QFrame()
+        actions.setObjectName("welcomeActions")
+        actions.setMinimumWidth(330)
+        actions_layout = QVBoxLayout(actions)
+        actions_layout.setContentsMargins(0, 0, 0, 0)
+        actions_layout.setSpacing(9)
+        actions_layout.addWidget(_section("Start"))
+
+        open_workspace = self._action_button("Open Workspace", "folder", primary=True)
+        open_workspace.setToolTip("Add a folder containing one or more ROS2 packages")
+        open_workspace.clicked.connect(lambda: self.open_workspace_requested.emit())
+        actions_layout.addWidget(open_workspace)
+
+        open_package = self._action_button("Open ROS Package", "cube")
+        open_package.setToolTip("Open a folder that contains package.xml")
+        open_package.clicked.connect(lambda: self.open_package_requested.emit())
+        actions_layout.addWidget(open_package)
+
+        new_workspace = self._action_button("New Empty Workspace", "folder-plus")
+        new_workspace.clicked.connect(lambda: self.new_workspace_requested.emit())
+        actions_layout.addWidget(new_workspace)
+
+        continue_button = self._action_button("Continue to IDE", "explorer")
+        continue_button.clicked.connect(lambda: self.continue_requested.emit())
+        actions_layout.addWidget(continue_button)
+        actions_layout.addStretch(1)
+        columns.addWidget(actions, 4)
+
+        workspace_panel = QFrame()
+        workspace_panel.setObjectName("welcomeWorkspacePanel")
+        workspace_layout = QVBoxLayout(workspace_panel)
+        workspace_layout.setContentsMargins(18, 16, 18, 16)
+        workspace_layout.setSpacing(8)
+        workspace_layout.addWidget(_section("Current Workspace"))
+        self.workspace_name = QLabel("Workspace")
+        self.workspace_name.setObjectName("welcomeWorkspaceName")
+        workspace_layout.addWidget(self.workspace_name)
+        self.workspace_meta = QLabel("No folders added")
+        self.workspace_meta.setObjectName("welcomeMeta")
+        workspace_layout.addWidget(self.workspace_meta)
+        self.workspace_root = QLabel("Open a workspace folder to discover ROS2 packages.")
+        self.workspace_root.setObjectName("welcomeRoot")
+        self.workspace_root.setWordWrap(True)
+        workspace_layout.addWidget(self.workspace_root)
+
+        self.package_list = QListWidget()
+        self.package_list.setObjectName("welcomePackageList")
+        self.package_list.setUniformItemSizes(True)
+        self.package_list.itemActivated.connect(self._activate_package)
+        workspace_layout.addWidget(self.package_list, 1)
+        columns.addWidget(workspace_panel, 6)
+
+        stage_layout.addLayout(columns, 1)
+        outer.addWidget(stage, 0, Qt.AlignmentFlag.AlignHCenter)
+        outer.addStretch(1)
+
+    @staticmethod
+    def _action_button(text: str, icon_name: str, *, primary: bool = False) -> QPushButton:
+        button = _button(text, primary=primary)
+        button.setObjectName("welcomeAction")
+        button.setIcon(_icon(icon_name))
+        button.setIconSize(QSize(18, 18))
+        button.setMinimumHeight(44)
+        return button
+
+    def set_workspace(self, state: dict, packages: list[RosPackage]) -> None:
+        roots = [str(root) for root in state.get("roots") or []]
+        self.workspace_name.setText(str(state.get("name") or "Workspace"))
+        package_count = len(packages)
+        root_count = len(roots)
+        package_word = "package" if package_count == 1 else "packages"
+        root_word = "folder" if root_count == 1 else "folders"
+        self.workspace_meta.setText(
+            f"{package_count} {package_word} in {root_count} {root_word}"
+        )
+        if roots:
+            extra = f"\n+ {root_count - 1} more" if root_count > 1 else ""
+            root_path = Path(roots[0])
+            root_parts = root_path.parts
+            compact_root = str(root_path)
+            if len(root_parts) > 4:
+                compact_root = str(Path(root_parts[0], "...", *root_parts[-3:]))
+            self.workspace_root.setText(f"{compact_root}{extra}")
+            self.workspace_root.setToolTip(roots[0])
+        else:
+            self.workspace_root.setText("Open a workspace folder to discover ROS2 packages.")
+            self.workspace_root.setToolTip("")
+
+        self.package_list.clear()
+        if not packages:
+            empty = QListWidgetItem("No ROS2 packages detected")
+            empty.setFlags(Qt.ItemFlag.NoItemFlags)
+            empty.setForeground(QBrush(QColor("#708198")))
+            self.package_list.addItem(empty)
+            return
+        for package in packages:
+            item = QListWidgetItem(package.name)
+            item.setIcon(_icon("cube"))
+            item.setData(Qt.ItemDataRole.UserRole, str(package.path.resolve()))
+            item.setToolTip(str(package.path))
+            self.package_list.addItem(item)
+
+    def _activate_package(self, item: QListWidgetItem) -> None:
+        package_path = item.data(Qt.ItemDataRole.UserRole)
+        if package_path:
+            self.package_requested.emit(str(package_path))
+
+
+class MainWindow(QMainWindow):
+    docker_operation_finished = Signal(str, object, object)
+
+    def __init__(
+        self,
+        *,
+        show_welcome: bool | None = None,
+        settings: QSettings | None = None,
+    ) -> None:
+        super().__init__()
         ensure_dirs()
+        self._settings = settings if settings is not None else QSettings("MergeOS", "Lappa")
+        self._show_welcome_override = show_welcome
         self.packages = workspace.workspace_packages()
         self._package_by_path: dict[str, RosPackage] = {}
         self._package_labels: dict[str, str] = {}
@@ -511,6 +870,9 @@ class MainWindow(QMainWindow):
         self._ai_turns: list[tuple[str, str]] = []
         self._sim_running = False
         self._resize_active = False
+        self._docker_busy = False
+        self._docker_last_result: dict | None = None
+        self.docker_operation_finished.connect(self._finish_docker_operation)
         self.setAcceptDrops(True)
 
         self.setWindowTitle(f"Lappa - ROS2 Package IDE - v{__version__}")
@@ -525,9 +887,25 @@ class MainWindow(QMainWindow):
         root.setSpacing(0)
         self.setCentralWidget(central)
 
-        root.addWidget(self._build_topbar())
-        workspace_area = self._build_workspace()
-        root.addWidget(workspace_area, 1)
+        self.page_stack = QStackedWidget()
+        self.page_stack.setObjectName("pageStack")
+        self.welcome_page = WelcomePage()
+        self.welcome_page.open_workspace_requested.connect(self._welcome_open_workspace)
+        self.welcome_page.open_package_requested.connect(self._welcome_open_package)
+        self.welcome_page.new_workspace_requested.connect(self._welcome_new_workspace)
+        self.welcome_page.continue_requested.connect(self._enter_workbench)
+        self.welcome_page.package_requested.connect(self._welcome_select_package)
+        self.page_stack.addWidget(self.welcome_page)
+
+        self.workbench_page = QWidget()
+        self.workbench_page.setObjectName("workbenchPage")
+        workbench_layout = QVBoxLayout(self.workbench_page)
+        workbench_layout.setContentsMargins(0, 0, 0, 0)
+        workbench_layout.setSpacing(0)
+        workbench_layout.addWidget(self._build_topbar())
+        workbench_layout.addWidget(self._build_workspace(), 1)
+        self.page_stack.addWidget(self.workbench_page)
+        root.addWidget(self.page_stack, 1)
 
         self.setStatusBar(QStatusBar())
         self.cursor_label = QLabel("Ln 1, Col 1 | Saved")
@@ -546,7 +924,54 @@ class MainWindow(QMainWindow):
         if self.pkg_combo.count():
             self._editor_load_current_package()
 
+        self._refresh_welcome_workspace()
+        if self._should_show_welcome():
+            self._show_welcome()
+        else:
+            self._enter_workbench(mark_seen=False)
+
         self._status("Ready. Workspace packages are editable and simulatable side by side.")
+
+    def _should_show_welcome(self) -> bool:
+        if self._show_welcome_override is not None:
+            return self._show_welcome_override
+        seen = self._settings.value(WELCOME_SETTINGS_KEY, False)
+        return not (seen is True or str(seen).strip().lower() in {"1", "true", "yes"})
+
+    def _show_welcome(self) -> None:
+        self._refresh_welcome_workspace()
+        self.page_stack.setCurrentWidget(self.welcome_page)
+        self.statusBar().hide()
+        self.setWindowTitle(f"Welcome - Lappa ROS2 Package IDE - v{__version__}")
+
+    def _enter_workbench(self, *, mark_seen: bool = True) -> None:
+        if mark_seen:
+            self._settings.setValue(WELCOME_SETTINGS_KEY, True)
+            self._settings.sync()
+        self.page_stack.setCurrentWidget(self.workbench_page)
+        self.statusBar().show()
+        self._sync_editor_chrome()
+
+    def _refresh_welcome_workspace(self) -> None:
+        if hasattr(self, "welcome_page"):
+            self.welcome_page.set_workspace(workspace.load_workspace_state(), self.packages)
+
+    def _welcome_open_workspace(self) -> None:
+        if self._add_workspace_folder():
+            self._enter_workbench()
+
+    def _welcome_open_package(self) -> None:
+        if self._add_workspace_package():
+            self._enter_workbench()
+
+    def _welcome_new_workspace(self) -> None:
+        if self._new_workspace():
+            self._enter_workbench()
+
+    def _welcome_select_package(self, package_path: str) -> None:
+        self._editor_load_package(package_path)
+        if self._editor_pkg and self._package_key(self._editor_pkg) == str(Path(package_path).resolve()):
+            self._enter_workbench()
 
     def _build_topbar(self) -> QFrame:
         bar = QFrame()
@@ -632,6 +1057,9 @@ class MainWindow(QMainWindow):
         for button in (b_files, b_run, b_ai):
             rail_layout.addWidget(button)
         rail_layout.addStretch(1)
+        b_welcome = _tool_button("cube", "Welcome")
+        b_welcome.clicked.connect(self._show_welcome)
+        rail_layout.addWidget(b_welcome)
         outer.addWidget(rail)
 
         explorer = QFrame()
@@ -793,6 +1221,27 @@ class MainWindow(QMainWindow):
         layout.addLayout(top)
 
         self.canvas = SimCanvas()
+        view_bar = QHBoxLayout()
+        view_bar.setSpacing(8)
+        view_bar.addWidget(QLabel("View"))
+        self.sim_view_combo = QComboBox()
+        self.sim_view_combo.addItems(["Orbit", "Top", "Follow"])
+        self.sim_view_combo.currentTextChanged.connect(self.canvas.set_view_mode)
+        view_bar.addWidget(self.sim_view_combo)
+        for text, callback in (
+            ("Grid", self.canvas.set_grid_visible),
+            ("Laser", self.canvas.set_laser_visible),
+            ("Trail", self.canvas.set_trail_visible),
+        ):
+            toggle = QCheckBox(text)
+            toggle.setChecked(True)
+            toggle.toggled.connect(callback)
+            view_bar.addWidget(toggle)
+        view_bar.addStretch(1)
+        reset_view = _toolbar_button("reset", "Reset camera", width=28)
+        reset_view.clicked.connect(self.canvas.reset_view)
+        view_bar.addWidget(reset_view)
+        layout.addLayout(view_bar)
         layout.addWidget(self.canvas, 1)
 
         metrics = QGridLayout()
@@ -961,6 +1410,7 @@ class MainWindow(QMainWindow):
         tab = QWidget()
         layout = QVBoxLayout(tab)
         layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
         row = QHBoxLayout()
         self.ros2_combo = QComboBox()
         for version in ros2_versions.list_versions():
@@ -972,23 +1422,75 @@ class MainWindow(QMainWindow):
         b_apply = _button("Apply")
         b_apply.setToolTip("Apply selected ROS2 distro")
         b_apply.clicked.connect(self._set_ros2)
-        b_start = _button("Start", primary=True)
-        b_start.setToolTip("Start Docker runtime")
-        b_start.clicked.connect(self._docker_start)
-        b_launch = _button("Launch")
-        b_launch.setToolTip("Launch active package in Docker")
-        b_launch.clicked.connect(self._docker_launch_active)
-        b_stop = _button("Stop Run")
-        b_stop.setToolTip("Stop ros2 launch process")
-        b_stop.clicked.connect(self._docker_stop_launch)
-        b_down = _button("Down")
-        b_down.setToolTip("Stop Docker container")
-        b_down.clicked.connect(self._docker_stop)
+        self.docker_start_button = _button("Start", primary=True)
+        self.docker_start_button.setToolTip("Build and start the Lappa ROS2 runtime")
+        self.docker_start_button.clicked.connect(self._docker_start)
+        self.docker_launch_button = _button("Launch")
+        self.docker_launch_button.setToolTip("Build and launch the active package in ROS2")
+        self.docker_launch_button.clicked.connect(self._docker_launch_active)
+        self.docker_stop_button = _button("Stop Run")
+        self.docker_stop_button.setToolTip("Stop the current ros2 launch process")
+        self.docker_stop_button.clicked.connect(self._docker_stop_launch)
+        self.docker_down_button = _button("Down")
+        self.docker_down_button.setToolTip("Stop the Lappa Docker container")
+        self.docker_down_button.clicked.connect(self._docker_stop)
+        b_refresh = _button("Refresh")
+        b_refresh.setIcon(_icon("refresh"))
+        b_refresh.clicked.connect(self._refresh_docker)
         row.addWidget(QLabel("Target"))
         row.addWidget(self.ros2_combo, 1)
-        for button in (b_apply, b_start, b_launch, b_stop, b_down):
+        for button in (
+            b_apply,
+            self.docker_start_button,
+            self.docker_launch_button,
+            self.docker_stop_button,
+            self.docker_down_button,
+            b_refresh,
+        ):
             row.addWidget(button)
         layout.addLayout(row)
+
+        diagnostic_panel = QFrame()
+        diagnostic_panel.setObjectName("dockerDiagnosticPanel")
+        diagnostic_layout = QGridLayout(diagnostic_panel)
+        diagnostic_layout.setContentsMargins(10, 8, 10, 8)
+        diagnostic_layout.setHorizontalSpacing(18)
+        diagnostic_layout.setVerticalSpacing(5)
+        self.docker_status_labels: dict[str, QLabel] = {}
+        diagnostic_names = [
+            ("cli", "Docker CLI"),
+            ("engine", "Engine"),
+            ("compose", "Compose"),
+            ("image", "ROS2 Image"),
+            ("container", "Container"),
+            ("launch", "ROS2 Launch"),
+        ]
+        for index, (key, title) in enumerate(diagnostic_names):
+            name = QLabel(title)
+            name.setObjectName("dockerStatusName")
+            value = QLabel("Checking")
+            value.setObjectName("dockerStatusValue")
+            value.setProperty("statusLevel", "muted")
+            diagnostic_layout.addWidget(name, index // 3, (index % 3) * 2)
+            diagnostic_layout.addWidget(value, index // 3, (index % 3) * 2 + 1)
+            self.docker_status_labels[key] = value
+        layout.addWidget(diagnostic_panel)
+
+        guidance_row = QHBoxLayout()
+        self.docker_guidance = QLabel("Checking Docker runtime...")
+        self.docker_guidance.setObjectName("dockerGuidance")
+        self.docker_guidance.setWordWrap(True)
+        guidance_row.addWidget(self.docker_guidance, 1)
+        self.docker_desktop_button = _button("Open Docker Desktop", compact=True)
+        self.docker_desktop_button.clicked.connect(self._open_docker_desktop)
+        self.docker_install_button = _button("Install Docker", compact=True)
+        self.docker_install_button.clicked.connect(
+            lambda: QDesktopServices.openUrl(QUrl(docker_bridge.DOCKER_INSTALL_URL))
+        )
+        guidance_row.addWidget(self.docker_desktop_button)
+        guidance_row.addWidget(self.docker_install_button)
+        layout.addLayout(guidance_row)
+
         self.docker_info = QTextEdit()
         self.docker_info.setObjectName("logBox")
         self.docker_info.setReadOnly(True)
@@ -1014,12 +1516,13 @@ class MainWindow(QMainWindow):
         shortcuts = [
             ("Ctrl+S", self._editor_save, "Save active file"),
             ("Ctrl+R", self._editor_reload, "Reload active file"),
-            ("Ctrl+O", self._add_workspace_folder, "Open workspace folder"),
+            ("Ctrl+O", self._welcome_open_workspace, "Open workspace folder"),
             ("Ctrl+N", self._create_new_file, "New file"),
             ("Ctrl+Shift+N", self._create_new_folder, "New folder"),
             ("F5", self.sim_run, "Run native simulation"),
             ("Shift+F5", self.sim_stop, "Stop native simulation"),
             ("Ctrl+Shift+A", self._focus_ai_panel, "Focus AI chat"),
+            ("Ctrl+Shift+H", self._show_welcome, "Show welcome"),
         ]
         for sequence, slot, label in shortcuts:
             action = QAction(label, self)
@@ -1231,46 +1734,54 @@ class MainWindow(QMainWindow):
             if hasattr(self, "model_preview"):
                 self.model_preview.hide()
             self._set_editor_dirty(False)
+        self._refresh_welcome_workspace()
 
-    def _add_workspace_folder(self) -> None:
+    def _add_workspace_folder(self) -> bool:
         folder = QFileDialog.getExistingDirectory(
             self,
             "Add workspace folder",
             str(Path.home()),
         )
         if not folder:
-            return
+            return False
         try:
             workspace.add_workspace_root(folder)
             self._reload_workspace_packages()
             self._status(f"Workspace folder added: {folder}")
+            return True
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Workspace", str(exc))
+            return False
 
-    def _add_workspace_package(self) -> None:
+    def _add_workspace_package(self) -> bool:
         folder = QFileDialog.getExistingDirectory(
             self,
             "Add ROS2 package",
             str(Path.home()),
         )
         if not folder:
-            return
+            return False
         path = Path(folder).expanduser().resolve()
         if not workspace.is_ros_package_dir(path):
             QMessageBox.warning(self, "Workspace", "Selected folder has no package.xml.")
-            return
+            return False
         try:
             workspace.add_workspace_root(path)
             key = str(path)
             self._reload_workspace_packages(keep_key=key)
             self._status(f"Package added: {path.name}")
+            return True
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Workspace", str(exc))
+            return False
 
-    def _new_workspace(self) -> None:
+    def _new_workspace(self) -> bool:
+        if not self._confirm_editor_transition():
+            return False
         workspace.create_workspace("Workspace", include_samples=False)
         self._reload_workspace_packages()
         self._status("New workspace created")
+        return True
 
     def dragEnterEvent(self, event) -> None:  # noqa: N802
         if event.mimeData().hasUrls():
@@ -1296,6 +1807,8 @@ class MainWindow(QMainWindow):
         if added:
             self._reload_workspace_packages()
             self._status(f"Workspace updated from dropped folder(s): {added}")
+            if self.page_stack.currentWidget() is self.welcome_page:
+                self._enter_workbench()
 
     def _clean_rel_path(self, raw: str) -> str:
         rel = raw.replace("\\", "/").strip().lstrip("/")
@@ -1672,22 +2185,10 @@ class MainWindow(QMainWindow):
             self._status(f"ROS2 set failed: {exc}")
 
     def _docker_start(self) -> None:
-        try:
-            result = docker_bridge.start_runtime()
-            self.docker_info.setPlainText(str(result))
-            self._status("Docker runtime " + ("started" if result.get("ok") else "failed"))
-        except Exception as exc:  # noqa: BLE001
-            self.docker_info.setPlainText(str(exc))
-            self._status(f"Docker start failed: {exc}")
+        self._run_docker_operation("Starting Docker runtime", docker_bridge.start_runtime)
 
     def _docker_stop(self) -> None:
-        try:
-            result = docker_bridge.stop_runtime()
-            self.docker_info.setPlainText(str(result))
-            self._status("Docker runtime stopped")
-        except Exception as exc:  # noqa: BLE001
-            self.docker_info.setPlainText(str(exc))
-            self._status(f"Docker stop failed: {exc}")
+        self._run_docker_operation("Stopping Docker runtime", docker_bridge.stop_runtime)
 
     def _docker_launch_active(self) -> None:
         pkg = self._active_package()
@@ -1700,37 +2201,200 @@ class MainWindow(QMainWindow):
                     "Docker launch currently uses the mounted bundled package tree. "
                     "Run native sim for external workspace packages."
                 )
-                self.docker_info.setPlainText(msg)
+                self._docker_last_result = {"ok": False, "error": msg}
+                self._refresh_docker()
                 self._status(msg)
                 return
-        try:
-            result = docker_bridge.launch_demo(demo)
-            self.docker_info.setPlainText(str(result))
-            msg = result.get("message") or result.get("error") or "Docker launch complete"
-            self._status(str(msg)[:140])
-        except Exception as exc:  # noqa: BLE001
-            self.docker_info.setPlainText(str(exc))
-            self._status(f"Docker launch failed: {exc}")
+        self._run_docker_operation(
+            f"Building and launching {demo}", lambda: docker_bridge.launch_demo(demo)
+        )
 
     def _docker_stop_launch(self) -> None:
-        try:
-            result = docker_bridge.stop_launch()
-            self.docker_info.setPlainText(str(result))
-            self._status("Docker launch stopped")
-        except Exception as exc:  # noqa: BLE001
-            self.docker_info.setPlainText(str(exc))
-            self._status(f"Docker launch stop failed: {exc}")
+        self._run_docker_operation("Stopping ROS2 launch", docker_bridge.stop_launch)
+
+    def _run_docker_operation(
+        self, label: str, operation: Callable[[], dict[str, object]]
+    ) -> None:
+        if self._docker_busy:
+            return
+        self._docker_busy = True
+        self.docker_guidance.setText(f"{label}. This may take a few minutes on first build.")
+        self._update_docker_buttons({})
+
+        def worker() -> None:
+            try:
+                result = operation()
+                diagnostics = result.get("status") if isinstance(result, dict) else None
+                if not isinstance(diagnostics, dict):
+                    diagnostics = docker_bridge.status()
+            except Exception as exc:  # noqa: BLE001
+                result = {"ok": False, "error": str(exc)}
+                diagnostics = docker_bridge.status()
+            self.docker_operation_finished.emit(label, result, diagnostics)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _finish_docker_operation(self, label: str, result: object, diagnostics: object) -> None:
+        self._docker_busy = False
+        self._docker_last_result = result if isinstance(result, dict) else {"result": str(result)}
+        status = diagnostics if isinstance(diagnostics, dict) else docker_bridge.status()
+        self._apply_docker_status(status)
+        if status.get("container_health") == "starting":
+            QTimer.singleShot(5000, self._refresh_docker)
+        ok = bool(self._docker_last_result.get("ok"))
+        message = (
+            self._docker_last_result.get("message")
+            or self._docker_last_result.get("error")
+            or (f"{label} complete" if ok else f"{label} failed")
+        )
+        self._status(str(message)[:160])
+
+    @staticmethod
+    def _docker_level(value: bool | None, *, warn_when_false: bool = False) -> str:
+        if value is None:
+            return "muted"
+        if value:
+            return "ok"
+        return "warn" if warn_when_false else "error"
+
+    def _set_docker_status(self, key: str, text: str, level: str) -> None:
+        label = self.docker_status_labels[key]
+        label.setText(text)
+        label.setProperty("statusLevel", level)
+        label.style().unpolish(label)
+        label.style().polish(label)
+
+    def _update_docker_buttons(self, status: dict) -> None:
+        busy = self._docker_busy
+        available = bool(status.get("available"))
+        daemon = bool(status.get("daemon"))
+        compose = bool(status.get("compose_available"))
+        running = bool(status.get("running"))
+        session = status.get("session") or {}
+        self.docker_start_button.setEnabled(not busy and bool(status.get("ready_for_start")))
+        self.docker_launch_button.setEnabled(
+            not busy
+            and available
+            and daemon
+            and compose
+            and (not running or bool(status.get("ready_for_launch")))
+        )
+        self.docker_stop_button.setEnabled(
+            not busy and session.get("mode") == "docker_launch"
+        )
+        self.docker_down_button.setEnabled(not busy and running)
+
+    def _apply_docker_status(self, status: dict) -> None:
+        available = bool(status.get("available"))
+        daemon = bool(status.get("daemon"))
+        compose = bool(status.get("compose_available"))
+        image_present = status.get("image_present")
+        container_exists = status.get("container_exists")
+        running = bool(status.get("running"))
+        container_health = status.get("container_health")
+        session = status.get("session") or {}
+
+        cli_text = "Installed" if available else "Missing"
+        self._set_docker_status("cli", cli_text, self._docker_level(available))
+        engine_text = "Running" if daemon else ("Stopped" if available else "Unavailable")
+        self._set_docker_status("engine", engine_text, self._docker_level(daemon))
+        compose_text = status.get("compose_version") or ("Missing" if available else "Unavailable")
+        self._set_docker_status("compose", str(compose_text), self._docker_level(compose))
+        image_text = (
+            "Ready"
+            if image_present is True
+            else "Not built"
+            if image_present is False
+            else "Not checked"
+        )
+        self._set_docker_status(
+            "image", image_text, self._docker_level(image_present, warn_when_false=True)
+        )
+        container_text = (
+            f"Running ({container_health})"
+            if running and container_health
+            else "Running"
+            if running
+            else str(status.get("container_status") or "Stopped")
+            if container_exists is not None
+            else "Not checked"
+        )
+        container_level = (
+            "error"
+            if container_health == "unhealthy"
+            else "warn"
+            if container_health == "starting"
+            else "ok"
+            if running
+            else "warn"
+            if daemon
+            else "muted"
+        )
+        self._set_docker_status("container", container_text.title(), container_level)
+        launch_running = bool(session.get("running"))
+        launch_text = session.get("demo") if launch_running else "Idle"
+        self._set_docker_status("launch", str(launch_text), "ok" if launch_running else "muted")
+
+        message = str(status.get("message") or "Docker status unavailable.")
+        guidance = str(status.get("guidance") or "")
+        self.docker_guidance.setText(f"{message} {guidance}".strip())
+        state = status.get("state")
+        self.docker_install_button.setVisible(state == "not_installed")
+        self.docker_desktop_button.setVisible(
+            state == "engine_stopped" and bool(status.get("docker_desktop_path"))
+        )
+        self._update_docker_buttons(status)
+
+        details = [
+            f"CLI: {status.get('cli_version') or 'not installed'}",
+            f"Path: {status.get('cli_path') or '-'}",
+            f"Context: {status.get('context') or '-'}",
+            f"Engine: {status.get('server_version') or 'not running'}",
+            f"ROS2 target: {status.get('ros2_distro')}",
+            f"Image: {status.get('image')}",
+            f"Container: {status.get('container_status')}",
+            f"Health: {status.get('container_health') or '-'}",
+            f"Compose: {status.get('compose_file')}",
+        ]
+        if status.get("detail"):
+            details.extend(["", "Diagnostic:", str(status["detail"])])
+        if session.get("last_log"):
+            details.extend(["", "ROS2 session log:", str(session["last_log"])])
+        if self._docker_last_result:
+            details.extend(
+                [
+                    "",
+                    "Last operation:",
+                    json.dumps(self._docker_last_result, indent=2, default=str),
+                ]
+            )
+        self.docker_info.setPlainText("\n".join(details))
+
+    def _open_docker_desktop(self) -> None:
+        result = docker_bridge.open_docker_desktop()
+        self._docker_last_result = result
+        self.docker_guidance.setText(
+            str(result.get("message") or result.get("error") or "Docker Desktop request sent.")
+        )
+        self._status(self.docker_guidance.text())
+        if result.get("ok"):
+            QTimer.singleShot(5000, self._refresh_docker)
 
     def _refresh_docker(self) -> None:
         if not hasattr(self, "docker_info"):
             return
         try:
-            self.docker_info.setPlainText(str(docker_bridge.status()))
+            self._apply_docker_status(docker_bridge.status())
         except Exception as exc:  # noqa: BLE001
+            self.docker_guidance.setText(f"Docker status check failed: {exc}")
             self.docker_info.setPlainText(str(exc))
 
     def _goto(self, key: str) -> None:
         """Compatibility hook for screenshot automation."""
+        if key == "welcome":
+            self._show_welcome()
+            return
+        self._enter_workbench(mark_seen=False)
         mapping = {
             "ai": 0,
             "console": 1,

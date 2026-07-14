@@ -6,8 +6,9 @@ Produce standalone binaries:
 | --- | --- |
 | `lappa-windows-x64.exe` | Windows 10/11 x64 |
 | `lappa-linux-x64` | Linux x64 |
+| `SHA256SUMS.txt` | SHA-256 checksums |
 
-Stack: **PyInstaller onefile** + PySide6 Qt desktop IDE + bundled Lappa app icon. Double-click / run with no args opens the desktop package editor.
+Stack: **PyInstaller onefile** + PySide6 Qt desktop IDE + bundled Lappa app icon. Double-click / run with no args opens the desktop package editor. Tag builds must pass Ruff, Pytest, and compile checks before either platform artifact is built.
 
 ## Local build
 
@@ -16,14 +17,14 @@ Stack: **PyInstaller onefile** + PySide6 Qt desktop IDE + bundled Lappa app icon
 ```powershell
 cd D:\ThanhTrucSolutions\Lappa
 pwsh scripts\build_release.ps1
-# → dist\release\lappa-windows-x64.exe
+# -> dist\release\lappa-windows-x64.exe + SHA256SUMS.txt
 ```
 
 ### Linux
 
 ```bash
 bash scripts/build_release.sh
-# → dist/release/lappa-linux-x64
+# -> dist/release/lappa-linux-x64 + SHA256SUMS.txt
 ```
 
 ### Manual PyInstaller
@@ -40,12 +41,12 @@ Workflow: [`.github/workflows/release.yml`](../.github/workflows/release.yml)
 
 | Trigger | Result |
 | --- | --- |
-| Tag `v*` (e.g. `v0.2.1`) | Build Win+Linux, create GitHub Release with assets + SHA256SUMS |
+| Tag `v*` (e.g. `v0.4.30`) | Quality gate, build Win+Linux, create GitHub Release with assets + SHA256SUMS |
 | `workflow_dispatch` | Build both platforms, upload artifacts (no release unless tag) |
 
 ```bash
-git tag v0.2.1
-git push origin v0.2.1
+git tag v0.4.30
+git push origin v0.4.30
 ```
 
 ## Runtime layout (frozen)

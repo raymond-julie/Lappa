@@ -9,6 +9,7 @@ rebuilding the image every time.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import threading
@@ -20,6 +21,7 @@ from lappa.config import DEMOS_ROOT, DOCKER_DIR
 from lappa.ros2_versions import dockerfile_for, get_selected
 
 CONTAINER_NAME = "lappa-ros2"
+DOCKER_INSTALL_URL = "https://docs.docker.com/desktop/setup/install/windows-install/"
 
 
 class _LaunchState:
@@ -39,14 +41,53 @@ def docker_available() -> bool:
     return shutil.which("docker") is not None
 
 
-def _run(args: list[str], timeout: float = 20.0) -> tuple[int, str, str]:
+def docker_desktop_path() -> Path | None:
+    """Return the Docker Desktop executable when installed on Windows."""
+    candidates = [
+        Path(os.environ.get("ProgramFiles", "C:/Program Files"))
+        / "Docker"
+        / "Docker"
+        / "Docker Desktop.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Docker" / "Docker Desktop.exe",
+    ]
+    return next((path for path in candidates if path.is_file()), None)
+
+
+def open_docker_desktop() -> dict[str, Any]:
+    path = docker_desktop_path()
+    if path is None:
+        return {
+            "ok": False,
+            "error": "Docker Desktop was not found on this computer.",
+            "install_url": DOCKER_INSTALL_URL,
+        }
+    try:
+        subprocess.Popen([str(path)], close_fds=True)  # noqa: S603
+    except OSError as exc:
+        return {"ok": False, "error": str(exc), "path": str(path)}
+    return {
+        "ok": True,
+        "message": "Docker Desktop is starting. Refresh status when the engine is ready.",
+        "path": str(path),
+    }
+
+
+def _run(
+    args: list[str],
+    timeout: float = 20.0,
+    *,
+    env: dict[str, str] | None = None,
+) -> tuple[int, str, str]:
     try:
         p = subprocess.run(
             args,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
             check=False,
+            env=env,
         )
         return p.returncode, p.stdout or "", p.stderr or ""
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
@@ -71,67 +112,205 @@ def apply_ros2_dockerfile(distro: str | None = None) -> dict[str, Any]:
 
 
 def status() -> dict[str, Any]:
+    """Return layered Docker readiness without hiding partial installation states."""
     selected = get_selected()
     distro = selected.get("id", "humble")
     image = f"lappa-ros2:{distro}"
-    with _STATE.lock:
-        launch = {
-            "mode": _STATE.mode,
-            "demo": _STATE.demo,
-            "started_at": _STATE.started_at,
-            "running": _STATE.proc is not None and _STATE.proc.poll() is None,
-            "last_log": _STATE.last_log[-1500:],
-        }
+    compose_file = DOCKER_DIR / "docker-compose.yml"
+    desktop_path = docker_desktop_path()
     launch_hint = {
-        "compose": str(DOCKER_DIR / "docker-compose.yml"),
+        "compose": str(compose_file),
         "suggested": [
-            f"docker compose -f {DOCKER_DIR / 'docker-compose.yml'} up --build -d",
+            f"docker compose -f {compose_file} up --build -d",
             "lappa docker launch --demo diff_drive_2w",
-            "# pipeline: source ROS → colcon build → ros2 launch <pkg> sim.launch.py",
+            "# pipeline: source ROS -> colcon build -> ros2 launch <pkg> sim.launch.py",
             f"# inside: source /opt/ros/{distro}/setup.bash && /ros2_ws.sh status",
         ],
         "native_fallback": "lappa sim start --demo diff_drive_2w",
         "bridge": (
-            "IDE packages/demos → /ws/src; Docker loads ROS2, colcon-builds the "
+            "IDE packages/demos -> /ws/src; Docker loads ROS2, colcon-builds the "
             "ament package, then ros2 launch <pkg> sim.launch.py"
         ),
     }
-    if not docker_available():
-        return {
-            "available": False,
-            "daemon": False,
-            "message": "Docker CLI not found — use native sim + IDE file editor offline",
-            "compose_file": str(DOCKER_DIR / "docker-compose.yml"),
-            "ros2_distro": distro,
-            "image": image,
-            "launch": launch_hint,
-            "session": launch,
-        }
-    code, out, err = _run(["docker", "info", "--format", "{{json .ServerVersion}}"])
-    daemon = code == 0
-    ccode, cout, _ = _run(
-        [
-            "docker",
-            "ps",
-            "--filter",
-            f"name={CONTAINER_NAME}",
-            "--format",
-            "{{.Names}} {{.Status}}",
-        ]
-    )
-    running = bool(cout.strip()) if ccode == 0 else False
-    return {
-        "available": True,
-        "daemon": daemon,
-        "running": running,
-        "ps": cout.strip(),
-        "message": "ok" if daemon else (err or out or "daemon not running"),
-        "compose_file": str(DOCKER_DIR / "docker-compose.yml"),
-        "image": image,
+    cli_path = shutil.which("docker")
+    base: dict[str, Any] = {
+        "available": bool(cli_path),
+        "cli_path": cli_path,
+        "cli_version": None,
+        "compose_available": False,
+        "compose_version": None,
+        "daemon": False,
+        "server_version": None,
+        "context": None,
+        "image_present": None,
+        "container_exists": None,
+        "container_status": "not checked",
+        "container_health": None,
+        "running": False,
+        "compose_file": str(compose_file),
+        "compose_file_exists": compose_file.is_file(),
+        "docker_desktop_path": str(desktop_path) if desktop_path else None,
+        "install_url": DOCKER_INSTALL_URL,
         "ros2_distro": distro,
+        "image": image,
         "docker_base": selected.get("docker_image"),
         "launch": launch_hint,
-        "session": launch,
+    }
+
+    def session_snapshot(
+        *,
+        container_running: bool = False,
+        launch_running: bool = False,
+        detected_demo: str | None = None,
+    ) -> dict[str, Any]:
+        with _STATE.lock:
+            return {
+                "mode": (
+                    "docker_launch"
+                    if launch_running
+                    else "docker_runtime"
+                    if container_running
+                    else "idle"
+                ),
+                "demo": detected_demo or _STATE.demo,
+                "started_at": _STATE.started_at,
+                "running": launch_running,
+                "last_log": _STATE.last_log[-1500:],
+            }
+
+    if not cli_path:
+        return {
+            **base,
+            "state": "not_installed",
+            "message": "Docker is not installed. Install Docker Desktop to run ROS2 containers.",
+            "guidance": "Native simulation remains available without Docker.",
+            "ready_for_start": False,
+            "ready_for_launch": False,
+            "session": session_snapshot(),
+        }
+
+    vcode, vout, _ = _run(["docker", "--version"], timeout=5.0)
+    if vcode == 0:
+        base["cli_version"] = vout.strip()
+    compose_code, compose_out, _ = _run(
+        ["docker", "compose", "version", "--short"], timeout=5.0
+    )
+    base["compose_available"] = compose_code == 0
+    base["compose_version"] = compose_out.strip() if compose_code == 0 else None
+    context_code, context_out, _ = _run(["docker", "context", "show"], timeout=5.0)
+    base["context"] = context_out.strip() if context_code == 0 else None
+
+    code, out, err = _run(
+        ["docker", "info", "--format", "{{json .ServerVersion}}"], timeout=8.0
+    )
+    daemon = code == 0
+    base["daemon"] = daemon
+    if daemon:
+        raw_server = out.strip()
+        try:
+            base["server_version"] = json.loads(raw_server)
+        except json.JSONDecodeError:
+            base["server_version"] = raw_server.strip('"') or None
+    else:
+        detail = (err or out or "Docker engine is not running.").strip()
+        return {
+            **base,
+            "state": "engine_stopped",
+            "message": "Docker CLI is installed, but the Docker Desktop engine is not running.",
+            "guidance": (
+                "Open Docker Desktop and wait for the engine to report Running, then refresh."
+                if desktop_path
+                else "Start the Docker engine, then refresh status."
+            ),
+            "detail": detail[-1200:],
+            "ready_for_start": False,
+            "ready_for_launch": False,
+            "session": session_snapshot(),
+        }
+
+    image_code, image_out, _ = _run(
+        ["docker", "image", "inspect", image, "--format", "{{.Id}}"], timeout=8.0
+    )
+    image_present = image_code == 0 and bool(image_out.strip())
+    container_code, container_out, _ = _run(
+        ["docker", "inspect", CONTAINER_NAME, "--format", "{{json .State}}"], timeout=8.0
+    )
+    container_exists = container_code == 0
+    container_state: dict[str, Any] = {}
+    if container_exists:
+        try:
+            container_state = json.loads(container_out.strip())
+        except json.JSONDecodeError:
+            container_state = {}
+    container_status = str(container_state.get("Status") or "not created")
+    health = container_state.get("Health") or {}
+    container_health = health.get("Status") if isinstance(health, dict) else None
+    running = container_status == "running"
+    detected_launch = False
+    detected_demo: str | None = None
+    if running:
+        probe_code, probe_out, _ = _run(
+            [
+                "docker",
+                "exec",
+                CONTAINER_NAME,
+                "bash",
+                "-lc",
+                "pid=$(cat /tmp/lappa_ros2_launch.pid 2>/dev/null || true); "
+                "if [ -n \"$pid\" ] && kill -0 \"$pid\" 2>/dev/null; then "
+                "printf 'running|%s|%s' \"$pid\" "
+                "\"$(cat /tmp/lappa_ros2_launch.demo 2>/dev/null || true)\"; "
+                "else printf 'idle||'; fi",
+            ],
+            timeout=8.0,
+        )
+        if probe_code == 0:
+            launch_parts = probe_out.strip().split("|", 2)
+            detected_launch = bool(launch_parts and launch_parts[0] == "running")
+            if len(launch_parts) == 3 and launch_parts[2]:
+                detected_demo = launch_parts[2]
+    base.update(
+        {
+            "image_present": image_present,
+            "container_exists": container_exists,
+            "container_status": container_status,
+            "container_health": container_health,
+            "running": running,
+        }
+    )
+    if running and container_health == "unhealthy":
+        state = "container_unhealthy"
+        message = "The Lappa ROS2 container is running, but its healthcheck is failing."
+        guidance = "Restart the runtime and inspect the diagnostic log before launching ROS2."
+    elif running and container_health == "starting":
+        state = "container_starting"
+        message = "The Lappa ROS2 container is starting."
+        guidance = "Wait for the healthcheck to become Healthy, then launch the package."
+    elif running:
+        state = "ready"
+        message = "Docker runtime is ready for ROS2 launch."
+        guidance = "Launch the active bundled package or inspect the current ROS2 session."
+    elif image_present:
+        state = "container_stopped"
+        message = "The Lappa ROS2 image is built, but its container is stopped."
+        guidance = "Start the runtime, then launch the active package."
+    else:
+        state = "image_missing"
+        message = "Docker is ready. The Lappa ROS2 image has not been built yet."
+        guidance = "Start the runtime once to build the selected ROS2 image."
+    return {
+        **base,
+        "state": state,
+        "message": message,
+        "guidance": guidance,
+        "ready_for_start": bool(base["compose_available"] and base["compose_file_exists"]),
+        "ready_for_launch": running
+        and container_health not in {"starting", "unhealthy"},
+        "session": session_snapshot(
+            container_running=running,
+            launch_running=detected_launch,
+            detected_demo=detected_demo,
+        ),
     }
 
 
@@ -141,13 +320,23 @@ def start_runtime(workspace: Path | None = None) -> dict[str, Any]:
         return {"ok": False, **st}
     if not st["daemon"]:
         return {"ok": False, "error": "Docker daemon not running", **st}
+    if not st.get("compose_available"):
+        return {
+            "ok": False,
+            "error": "Docker Compose is not available. Update Docker Desktop and try again.",
+            **st,
+        }
     applied = apply_ros2_dockerfile()
     compose = DOCKER_DIR / "docker-compose.yml"
     if not compose.is_file():
         return {"ok": False, "error": f"missing {compose}"}
+    compose_env = os.environ.copy()
+    compose_env["LAPPA_ROS2_IMAGE"] = applied["image_tag"]
+    compose_env["LAPPA_ROS_DISTRO"] = applied["distro"]
     code, out, err = _run(
         ["docker", "compose", "-f", str(compose), "up", "-d", "--build"],
-        timeout=180.0,
+        timeout=600.0,
+        env=compose_env,
     )
     with _STATE.lock:
         if code == 0:
@@ -159,7 +348,7 @@ def start_runtime(workspace: Path | None = None) -> dict[str, Any]:
         "stderr": err[-2000:],
         "dockerfile": applied,
         "status": status(),
-        "mount": "packages/demos → /ws/src (live IDE edits)",
+        "mount": "packages/demos -> /ws/src (live IDE edits)",
     }
 
 
@@ -184,8 +373,14 @@ def stop_runtime() -> dict[str, Any]:
 
 def _ensure_container() -> dict[str, Any]:
     st = status()
-    if st.get("running"):
+    if st.get("running") and st.get("container_health") != "unhealthy":
         return {"ok": True, "status": st}
+    if st.get("running"):
+        return {
+            "ok": False,
+            "error": "Docker container is unhealthy. Rebuild the runtime before launching ROS2.",
+            "status": st,
+        }
     return start_runtime()
 
 
@@ -234,7 +429,7 @@ def build_package(demo: str | None = None) -> dict[str, Any]:
         if not up.get("ok") and not status().get("running"):
             return {
                 "ok": False,
-                "error": "container not running — lappa docker start first",
+                "error": "container not running; run lappa docker start first",
                 "detail": up,
             }
     args = ["build"]
@@ -257,9 +452,9 @@ def launch_demo(demo: str, *, ensure_up: bool = True, rebuild: bool = True) -> d
 
     Pipeline (what the user expects)::
 
-        /opt/ros/$DISTRO  →  colcon build --packages-select <pkg>
-                          →  source /ws/install/setup.bash
-                          →  ros2 launch <pkg> sim.launch.py
+        /opt/ros/$DISTRO  ->  colcon build --packages-select <pkg>
+                          ->  source /ws/install/setup.bash
+                          ->  ros2 launch <pkg> sim.launch.py
 
     IDE edits under packages/demos are the same sources at /ws/src.
     """
@@ -282,7 +477,7 @@ def launch_demo(demo: str, *, ensure_up: bool = True, rebuild: bool = True) -> d
 
     if ensure_up:
         up = _ensure_container()
-        if not up.get("ok") and not status().get("running"):
+        if not up.get("ok"):
             return {
                 "ok": False,
                 "error": up.get("error") or up.get("message") or "container not up",
@@ -309,7 +504,7 @@ def launch_demo(demo: str, *, ensure_up: bool = True, rebuild: bool = True) -> d
                 "stdout": bout[-3000:],
                 "stderr": berr[-2000:],
                 "message": (
-                    f"colcon build failed for {pkg} — image must include ROS2+colcon "
+                    f"colcon build failed for {pkg}; image must include ROS2+colcon "
                     "(rebuild: lappa docker start after distro change)"
                 ),
                 "native_fallback": f"lappa sim start --demo {demo}",
@@ -320,12 +515,6 @@ def launch_demo(demo: str, *, ensure_up: bool = True, rebuild: bool = True) -> d
 
     lcode, lout, lerr = _exec_ros2_ws(["launch", pkg, launch_file], timeout=120.0)
     log = (lout + "\n" + lerr).strip()
-    with _STATE.lock:
-        _STATE.demo = demo
-        _STATE.started_at = time.time()
-        _STATE.last_log = (build_log[-800:] + "\n" + log)[-2500:]
-        _STATE.mode = "docker_launch" if lcode == 0 else _STATE.mode
-
     # Confirm ROS sees the package / nodes
     scode, sout, serr = _exec_ros2_ws(["status"], timeout=40.0)
     ros_status = (sout + "\n" + serr).strip()
@@ -335,11 +524,17 @@ def launch_demo(demo: str, *, ensure_up: bool = True, rebuild: bool = True) -> d
         or "teleop" in ros_status
         or "/odom" in ros_status
         or "/joint" in ros_status
-        or lcode == 0
+        or "launch_state=running" in ros_status
     )
+    with _STATE.lock:
+        _STATE.demo = demo if ok else None
+        _STATE.started_at = time.time() if ok else None
+        _STATE.last_log = (build_log[-800:] + "\n" + log)[-2500:]
+        if ok:
+            _STATE.mode = "docker_launch"
 
     return {
-        "ok": ok and lcode == 0,
+        "ok": ok,
         "demo": demo,
         "package": pkg,
         "launch_file": launch_file,
@@ -360,8 +555,8 @@ def launch_demo(demo: str, *, ensure_up: bool = True, rebuild: bool = True) -> d
         "message": (
             f"ROS2 package '{pkg}' built and launched in Docker "
             f"(ros2 launch {pkg} {launch_file})"
-            if lcode == 0
-            else "ros2 launch failed — see stdout/stderr; native sim remains available"
+            if ok
+            else "ros2 launch failed; see stdout/stderr. Native sim remains available."
         ),
         "native_fallback": f"lappa sim start --demo {demo}",
         "status": status(),
@@ -385,30 +580,16 @@ def stop_launch() -> dict[str, Any]:
         return {"ok": True, "stopped": False, "reason": "no docker"}
 
     code, out, err = _exec_ros2_ws(["stop"], timeout=20.0)
-    # Fallback pkill if helper missing (old image)
-    if code != 0:
-        code, out, err = _run(
-            [
-                "docker",
-                "exec",
-                CONTAINER_NAME,
-                "bash",
-                "-lc",
-                "pkill -f 'ros2 launch' 2>/dev/null || true; "
-                "pkill -f 'sim.launch' 2>/dev/null || true; "
-                "echo stopped",
-            ],
-            timeout=15.0,
-        )
     with _STATE.lock:
         _STATE.last_log = (out + err).strip() or _STATE.last_log
         if _STATE.mode == "docker_launch":
             _STATE.mode = "docker_runtime"
     return {
-        "ok": True,
+        "ok": code == 0,
         "demo": demo,
         "code": code,
         "stdout": out[-500:],
+        "stderr": err[-500:],
         "status": status(),
     }
 
@@ -432,11 +613,11 @@ def launch_status() -> dict[str, Any]:
 def show_info() -> dict[str, Any]:
     selected = get_selected()
     return {
-        "title": "Docker loads ROS2 → colcon build package → ros2 launch",
+        "title": "Docker loads ROS2 -> colcon build package -> ros2 launch",
         "ros2_distro": selected,
         "steps": [
             "1. IDE opens packages/demos/<pkg> (same tree Docker mounts at /ws/src)",
-            "2. lappa docker start — image has /opt/ros/$DISTRO + colcon",
+            "2. lappa docker start: image has /opt/ros/$DISTRO + colcon",
             "3. lappa docker launch --demo <pkg> runs: colcon build + ros2 launch <pkg> sim.launch.py",
             "4. Nodes/topics are real ROS2 (/cmd_vel, /odom, /scan) inside the container",
             "5. Offline fallback: lappa sim start --demo <pkg> (native kinematics)",

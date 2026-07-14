@@ -9,6 +9,7 @@ services:
     build: .
     image: ${LAPPA_ROS2_IMAGE:-lappa-ros2:humble}
     container_name: lappa-ros2
+    init: true
     volumes:
       - ../demos:/ws/src:rw
       - ./ros2_distro.txt:/ws/ros2_distro.txt:ro
@@ -17,6 +18,12 @@ services:
       - ROS_DISTRO=${LAPPA_ROS_DISTRO:-humble}
     stdin_open: true
     tty: true
+    healthcheck:
+      test: ["CMD-SHELL", ". /opt/ros/$${ROS_DISTRO}/setup.sh && command -v ros2 >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
     # Keep container up for docker exec launch sessions from IDE/CLI
     command: ["bash", "-lc", "sleep infinity"]
     # GUI show (optional): enable with VcXsrv / WSLg on Windows
