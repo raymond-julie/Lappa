@@ -8,9 +8,16 @@ from rich import print as rprint
 from rich.console import Console
 from rich.table import Table
 
-from lappa import __version__, docker_bridge, models3d, packager, ros2_versions
+from lappa import (
+    __version__,
+    docker_bridge,
+    models3d,
+    packager,
+    ros2_versions,
+    workspace as workspace_store,
+)
 from lappa.config import DEMOS_ROOT, ensure_dirs
-from lappa.package_loader import list_demo_packages, load_package
+from lappa.package_loader import list_demo_packages
 from lappa.sim.session import SESSION
 
 app = typer.Typer(help="Lappa — ROS2 package IDE server CLI", no_args_is_help=True)
@@ -110,16 +117,72 @@ def demos_list() -> None:
 
 @workspace_app.command("open")
 def workspace_open(path: Path) -> None:
-    pkg = load_package(path if path.is_absolute() else DEMOS_ROOT / path)
+    pkg = workspace_store.resolve_package_ref(path, base_dir=Path.cwd())
+    workspace_store.set_active_package(pkg.path)
     rprint(pkg.to_dict())
+
+
+@workspace_app.command("list")
+def workspace_list() -> None:
+    table = Table(title="Workspace packages")
+    table.add_column("Name")
+    table.add_column("Files")
+    table.add_column("Path")
+    for pkg in workspace_store.workspace_packages():
+        table.add_row(pkg.name, str(len(pkg.files)), str(pkg.path))
+    console.print(table)
+
+
+@workspace_app.command("roots")
+def workspace_roots_cmd() -> None:
+    table = Table(title="Workspace roots")
+    table.add_column("Path")
+    for root in workspace_store.workspace_roots():
+        table.add_row(str(root))
+    console.print(table)
+
+
+@workspace_app.command("add")
+def workspace_add(path: Path) -> None:
+    state = workspace_store.add_workspace_root(path if path.is_absolute() else Path.cwd() / path)
+    rprint({"ok": True, "roots": state["roots"]})
+
+
+@workspace_app.command("remove")
+def workspace_remove(path: Path) -> None:
+    state = workspace_store.remove_workspace_root(
+        path if path.is_absolute() else Path.cwd() / path
+    )
+    rprint({"ok": True, "roots": state["roots"]})
+
+
+@workspace_app.command("new")
+def workspace_new(
+    include_samples: bool = typer.Option(
+        False,
+        "--include-samples",
+        help="Seed the new workspace with bundled sample packages.",
+    ),
+) -> None:
+    state = workspace_store.create_workspace(include_samples=include_samples)
+    rprint({"ok": True, **state})
 
 
 @sim_app.command("start")
 def sim_start(
     demo: str = typer.Option("diff_drive_2w", "--demo", "-d"),
+    package: str | None = typer.Option(None, "--package", "-p"),
 ) -> None:
-    path = DEMOS_ROOT / demo
-    out = SESSION.start(demo, path if path.is_dir() else None)
+    pkg = None
+    if package:
+        pkg = workspace_store.resolve_package_ref(package, base_dir=Path.cwd())
+    elif demo:
+        try:
+            pkg = workspace_store.resolve_package_ref(demo, base_dir=Path.cwd())
+        except FileNotFoundError:
+            pkg = None
+    path = pkg.path if pkg else DEMOS_ROOT / demo
+    out = SESSION.start(pkg.name if pkg else demo, path if path.is_dir() else None)
     rprint(out)
 
 

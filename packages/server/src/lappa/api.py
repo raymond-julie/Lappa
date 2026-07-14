@@ -3,7 +3,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from lappa import __version__, docker_bridge, models3d, packager, ros2_versions, urdf
+from lappa import (
+    __version__,
+    docker_bridge,
+    models3d,
+    packager,
+    ros2_versions,
+    urdf,
+    workspace as workspace_store,
+)
 from lappa.config import DEMOS_ROOT, ensure_dirs
 from lappa.package_loader import list_demo_packages, load_package, read_file, write_file
 from lappa.sim.session import SESSION
@@ -26,10 +34,10 @@ def _active_package():
     global _active
     if _active and _active.is_dir():
         return load_package(_active)
-    packs = list_demo_packages(DEMOS_ROOT)
-    if packs:
-        _active = packs[0].path
-        return packs[0]
+    pkg = workspace_store.active_package()
+    if pkg:
+        _active = pkg.path
+        return pkg
     raise HTTPException(404, "no packages")
 
 
@@ -107,6 +115,7 @@ def health() -> dict[str, Any]:
         "service": "lappa",
         "version": __version__,
         "demos": [p.name for p in list_demo_packages(DEMOS_ROOT)],
+        "packages": [p.name for p in workspace_store.workspace_packages()],
         "docker": docker_bridge.status().get("available"),
         "ros2": ros2_versions.get_selected(),
     }
@@ -117,22 +126,33 @@ def api_demos() -> list[dict]:
     return [p.to_dict() for p in list_demo_packages(DEMOS_ROOT)]
 
 
+@app.get("/api/workspace/packages")
+def api_workspace_packages() -> list[dict]:
+    return [p.to_dict() for p in workspace_store.workspace_packages()]
+
+
+@app.get("/api/workspace/state")
+def api_workspace_state() -> dict:
+    active = _active_package()
+    return {
+        "state": workspace_store.load_workspace_state(),
+        "roots": [str(p) for p in workspace_store.workspace_roots()],
+        "active": active.to_dict(),
+        "packages": [p.to_dict() for p in workspace_store.workspace_packages()],
+    }
+
+
 @app.post("/api/workspace/open")
 def api_open(body: dict[str, str]) -> dict:
     global _active
     raw = body.get("path") or body.get("demo") or ""
-    path = Path(raw)
-    if not path.is_absolute():
-        cand = DEMOS_ROOT / raw
-        if cand.is_dir():
-            path = cand
-        else:
-            path = DEMOS_ROOT / raw
-    if not path.is_dir():
-        raise HTTPException(404, f"not found: {raw}")
-    _active = path.resolve()
-    pkg = load_package(_active)
-    return pkg.to_dict()
+    try:
+        pkg = workspace_store.resolve_package_ref(raw, base_dir=Path.cwd())
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    _active = pkg.path.resolve()
+    workspace_store.set_active_package(_active)
+    return load_package(_active).to_dict()
 
 
 @app.get("/api/workspace")
@@ -163,10 +183,20 @@ def api_write(body: FileBody) -> dict:
 
 @app.post("/api/sim/start")
 def api_sim_start(body: StartBody) -> dict:
-    path = Path(body.package) if body.package else DEMOS_ROOT / body.demo
-    if not path.is_dir():
-        path = DEMOS_ROOT / body.demo
-    return SESSION.start(body.demo, path if path.is_dir() else None)
+    pkg = None
+    if body.package:
+        try:
+            pkg = workspace_store.resolve_package_ref(body.package, base_dir=Path.cwd())
+        except FileNotFoundError:
+            pkg = None
+    if not pkg and body.demo:
+        try:
+            pkg = workspace_store.resolve_package_ref(body.demo, base_dir=Path.cwd())
+        except FileNotFoundError:
+            pkg = None
+    demo = pkg.name if pkg else body.demo
+    path = pkg.path if pkg else DEMOS_ROOT / body.demo
+    return SESSION.start(demo, path if path.is_dir() else None)
 
 
 @app.post("/api/sim/stop")

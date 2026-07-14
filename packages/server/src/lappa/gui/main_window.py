@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 from PySide6.QtCore import QPointF, Qt, QTimer
 from PySide6.QtGui import QBrush, QColor, QFont, QFontDatabase, QPainter, QPen
 from PySide6.QtWidgets import (
     QComboBox,
+    QFileDialog,
     QFormLayout,
     QFrame,
     QGridLayout,
@@ -29,10 +31,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from lappa import __version__, docker_bridge, models3d, packager, ros2_versions
+from lappa import __version__, docker_bridge, models3d, packager, ros2_versions, workspace
 from lappa.config import DEMOS_ROOT, ensure_dirs
 from lappa.gui.styles import STYLESHEET
-from lappa.package_loader import list_demo_packages, load_package, read_file, write_file
+from lappa.package_loader import RosPackage, load_package, read_file, write_file
 from lappa.sim.session import SESSION
 
 
@@ -224,11 +226,14 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         ensure_dirs()
-        self.packages = list_demo_packages(DEMOS_ROOT)
-        self._editor_pkg = None
+        self.packages = workspace.workspace_packages()
+        self._package_by_path: dict[str, RosPackage] = {}
+        self._package_labels: dict[str, str] = {}
+        self._editor_pkg: RosPackage | None = None
         self._editor_rel: str | None = None
         self._all_files: list[str] = []
         self._sim_running = False
+        self.setAcceptDrops(True)
 
         self.setWindowTitle(f"Lappa - ROS2 Package IDE - v{__version__}")
         self.resize(1460, 860)
@@ -243,19 +248,20 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
 
         root.addWidget(self._build_topbar())
-        workspace = self._build_workspace()
-        root.addWidget(workspace, 1)
+        workspace_area = self._build_workspace()
+        root.addWidget(workspace_area, 1)
 
         self.setStatusBar(QStatusBar())
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick_sim)
 
-        self.pkg_combo.currentTextChanged.connect(self._editor_load_package)
+        self._reload_workspace_packages(open_active=False)
+        self.pkg_combo.currentIndexChanged.connect(self._editor_load_current_package)
         self.file_filter.textChanged.connect(self._refresh_file_list)
         if self.pkg_combo.count():
-            self._editor_load_package(self.pkg_combo.currentText())
+            self._editor_load_current_package()
 
-        self._status("Ready. Edit package sources and run native simulation side by side.")
+        self._status("Ready. Workspace packages are editable and simulatable side by side.")
 
     def _build_topbar(self) -> QFrame:
         bar = QFrame()
@@ -279,7 +285,7 @@ class MainWindow(QMainWindow):
         self.pkg_combo = QComboBox()
         self.pkg_combo.setMinimumWidth(190)
         for pkg in self.packages:
-            self.pkg_combo.addItem(pkg.name)
+            self.pkg_combo.addItem(self._package_label(pkg), self._package_key(pkg))
         layout.addWidget(self.pkg_combo)
 
         self.header_file_label = QLabel("No file open")
@@ -318,6 +324,30 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(14, 14, 14, 14)
         layout.setSpacing(10)
 
+        layout.addWidget(_section("Workspace"))
+        self.workspace_roots_list = QListWidget()
+        self.workspace_roots_list.setObjectName("rootList")
+        self.workspace_roots_list.setMaximumHeight(82)
+        layout.addWidget(self.workspace_roots_list)
+
+        ws_row = QHBoxLayout()
+        b_add_folder = _button("Add Folder", compact=True)
+        b_add_folder.clicked.connect(self._add_workspace_folder)
+        b_add_pkg = _button("Add Package", compact=True)
+        b_add_pkg.clicked.connect(self._add_workspace_package)
+        ws_row.addWidget(b_add_folder)
+        ws_row.addWidget(b_add_pkg)
+        layout.addLayout(ws_row)
+
+        ws_row2 = QHBoxLayout()
+        b_new = _button("New", compact=True)
+        b_new.clicked.connect(self._new_workspace)
+        b_refresh = _button("Refresh", primary=True, compact=True)
+        b_refresh.clicked.connect(lambda: self._reload_workspace_packages())
+        ws_row2.addWidget(b_new)
+        ws_row2.addWidget(b_refresh)
+        layout.addLayout(ws_row2)
+
         layout.addWidget(_section("Package Explorer"))
         self.pkg_meta = QLabel("-")
         self.pkg_meta.setObjectName("muted")
@@ -333,20 +363,22 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.ed_file_list, 1)
 
         demo_row = QHBoxLayout()
-        b_open = _button("Open Demo", compact=True)
-        b_open.clicked.connect(self._open_selected_demo)
+        b_open = _button("Open", compact=True)
+        b_open.clicked.connect(self._open_selected_package)
         b_run = _button("Run", primary=True, compact=True)
-        b_run.clicked.connect(self._run_selected_demo)
+        b_run.clicked.connect(self._run_selected_package)
         demo_row.addWidget(b_open)
         demo_row.addWidget(b_run)
         layout.addLayout(demo_row)
 
-        layout.addWidget(_section("Demos"))
+        layout.addWidget(_section("Packages"))
         self.demo_list = QListWidget()
         self.demo_list.setMaximumHeight(150)
         for pkg in self.packages:
-            self.demo_list.addItem(pkg.name)
-        self.demo_list.itemDoubleClicked.connect(lambda _: self._open_selected_demo())
+            item = QListWidgetItem(self._package_label(pkg))
+            item.setData(Qt.ItemDataRole.UserRole, self._package_key(pkg))
+            self.demo_list.addItem(item)
+        self.demo_list.itemDoubleClicked.connect(lambda _: self._open_selected_package())
         layout.addWidget(self.demo_list)
         return panel
 
@@ -376,7 +408,7 @@ class MainWindow(QMainWindow):
         self.ops_tabs = QTabWidget()
         self.ops_tabs.setObjectName("opsTabs")
         self.ops_tabs.setMaximumHeight(230)
-        self.ops_tabs.addTab(self._tab_demos(), "Demos")
+        self.ops_tabs.addTab(self._tab_workspace(), "Workspace")
         self.ops_tabs.addTab(self._tab_models(), "3D Models")
         self.ops_tabs.addTab(self._tab_packages(), "Packages")
         self.ops_tabs.addTab(self._tab_ros2(), "ROS2 / Docker")
@@ -423,7 +455,7 @@ class MainWindow(QMainWindow):
 
         self.demo_combo = QComboBox()
         for pkg in self.packages:
-            self.demo_combo.addItem(pkg.name)
+            self.demo_combo.addItem(self._package_label(pkg), self._package_key(pkg))
         control_layout.addWidget(QLabel("Simulation package"))
         control_layout.addWidget(self.demo_combo)
 
@@ -460,24 +492,28 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.sim_log)
         return panel
 
-    def _tab_demos(self) -> QWidget:
+    def _tab_workspace(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
+        layout = QHBoxLayout(tab)
         layout.setContentsMargins(10, 10, 10, 10)
-        text = QLabel("Open any bundled ROS2 demo package, then edit and simulate it in-place.")
-        text.setObjectName("muted")
-        text.setWordWrap(True)
-        layout.addWidget(text)
-        row = QHBoxLayout()
-        b_open = _button("Open selected demo")
-        b_open.clicked.connect(self._open_selected_demo)
-        b_run = _button("Run selected demo", primary=True)
-        b_run.clicked.connect(self._run_selected_demo)
-        row.addWidget(b_open)
-        row.addWidget(b_run)
-        row.addStretch(1)
-        layout.addLayout(row)
-        layout.addStretch(1)
+        layout.setSpacing(10)
+        actions = QVBoxLayout()
+        b_add_folder = _button("Add Folder")
+        b_add_folder.clicked.connect(self._add_workspace_folder)
+        b_add_pkg = _button("Add Package")
+        b_add_pkg.clicked.connect(self._add_workspace_package)
+        b_new = _button("New Workspace")
+        b_new.clicked.connect(self._new_workspace)
+        b_refresh = _button("Refresh Scan", primary=True)
+        b_refresh.clicked.connect(lambda: self._reload_workspace_packages())
+        for button in (b_add_folder, b_add_pkg, b_new, b_refresh):
+            actions.addWidget(button)
+        actions.addStretch(1)
+        layout.addLayout(actions)
+        self.workspace_log = QTextEdit()
+        self.workspace_log.setObjectName("logBox")
+        self.workspace_log.setReadOnly(True)
+        layout.addWidget(self.workspace_log, 1)
         return tab
 
     def _tab_models(self) -> QWidget:
@@ -591,31 +627,208 @@ class MainWindow(QMainWindow):
     def _log(self, msg: str) -> None:
         if hasattr(self, "event_log"):
             self.event_log.append(msg)
+        if hasattr(self, "workspace_log"):
+            self.workspace_log.append(msg)
+
+    def _package_key(self, pkg: RosPackage) -> str:
+        return str(pkg.path.resolve())
+
+    def _package_label(self, pkg: RosPackage) -> str:
+        key = self._package_key(pkg)
+        if key in self._package_labels:
+            return self._package_labels[key]
+        names = [p.name for p in self.packages]
+        if names.count(pkg.name) > 1:
+            return f"{pkg.name}  -  {pkg.path.parent.name}"
+        return pkg.name
+
+    def _rebuild_package_index(self) -> None:
+        self._package_by_path = {self._package_key(pkg): pkg for pkg in self.packages}
+        counts: dict[str, int] = {}
+        for pkg in self.packages:
+            counts[pkg.name] = counts.get(pkg.name, 0) + 1
+        self._package_labels = {}
+        for pkg in self.packages:
+            label = pkg.name
+            if counts[pkg.name] > 1:
+                label = f"{pkg.name}  -  {pkg.path.parent.name}"
+            self._package_labels[self._package_key(pkg)] = label
+
+    def _fill_package_combo(self, combo: QComboBox, current_key: str | None = None) -> None:
+        combo.blockSignals(True)
+        combo.clear()
+        for pkg in self.packages:
+            combo.addItem(self._package_label(pkg), self._package_key(pkg))
+        if current_key:
+            idx = combo.findData(current_key)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+        combo.blockSignals(False)
+
+    def _combo_package(self, combo: QComboBox) -> RosPackage | None:
+        key = combo.currentData()
+        if key:
+            return self._package_by_path.get(str(key))
+        return None
+
+    def _active_package(self) -> RosPackage | None:
+        if self._editor_pkg:
+            return self._editor_pkg
+        if hasattr(self, "pkg_combo"):
+            return self._combo_package(self.pkg_combo)
+        if hasattr(self, "demo_combo"):
+            return self._combo_package(self.demo_combo)
+        return self.packages[0] if self.packages else None
 
     def _active_package_name(self) -> str:
-        return self.pkg_combo.currentText() or self.demo_combo.currentText() or "diff_drive_2w"
+        pkg = self._active_package()
+        return pkg.name if pkg else "diff_drive_2w"
 
-    def _editor_load_package(self, name: str) -> None:
-        name = (name or "").strip()
-        if not name:
+    def _refresh_workspace_roots(self) -> None:
+        if not hasattr(self, "workspace_roots_list"):
             return
-        path = DEMOS_ROOT / name
-        if not path.is_dir():
+        self.workspace_roots_list.clear()
+        for root in workspace.workspace_roots():
+            self.workspace_roots_list.addItem(str(root))
+
+    def _reload_workspace_packages(
+        self,
+        *,
+        keep_key: str | None = None,
+        open_active: bool = True,
+    ) -> None:
+        current = keep_key
+        if not current and self._editor_pkg:
+            current = self._package_key(self._editor_pkg)
+        self.packages = workspace.workspace_packages()
+        self._rebuild_package_index()
+        if hasattr(self, "pkg_combo"):
+            self._fill_package_combo(self.pkg_combo, current)
+        if hasattr(self, "demo_combo"):
+            self._fill_package_combo(self.demo_combo, current)
+        if hasattr(self, "demo_list"):
+            self.demo_list.clear()
+            for pkg in self.packages:
+                item = QListWidgetItem(self._package_label(pkg))
+                item.setData(Qt.ItemDataRole.UserRole, self._package_key(pkg))
+                self.demo_list.addItem(item)
+        self._refresh_workspace_roots()
+        if open_active and self.pkg_combo.count():
+            if current and self.pkg_combo.findData(current) >= 0:
+                self.pkg_combo.setCurrentIndex(self.pkg_combo.findData(current))
+            self._editor_load_current_package()
+        elif not self.packages:
+            self._editor_pkg = None
+            self._all_files = []
+            self._editor_rel = None
+            if hasattr(self, "pkg_meta"):
+                self.pkg_meta.setText("No package loaded")
+            if hasattr(self, "ed_file_list"):
+                self.ed_file_list.clear()
+            if hasattr(self, "ed_text"):
+                self.ed_text.clear()
+
+    def _add_workspace_folder(self) -> None:
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "Add workspace folder",
+            str(Path.home()),
+        )
+        if not folder:
             return
-        self._editor_pkg = load_package(path)
+        try:
+            workspace.add_workspace_root(folder)
+            self._reload_workspace_packages()
+            self._status(f"Workspace folder added: {folder}")
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Workspace", str(exc))
+
+    def _add_workspace_package(self) -> None:
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "Add ROS2 package",
+            str(Path.home()),
+        )
+        if not folder:
+            return
+        path = Path(folder).expanduser().resolve()
+        if not workspace.is_ros_package_dir(path):
+            QMessageBox.warning(self, "Workspace", "Selected folder has no package.xml.")
+            return
+        try:
+            workspace.add_workspace_root(path)
+            key = str(path)
+            self._reload_workspace_packages(keep_key=key)
+            self._status(f"Package added: {path.name}")
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Workspace", str(exc))
+
+    def _new_workspace(self) -> None:
+        workspace.create_workspace("Workspace", include_samples=False)
+        self._reload_workspace_packages()
+        self._status("New workspace created")
+
+    def dragEnterEvent(self, event) -> None:  # noqa: N802
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                if url.isLocalFile() and Path(url.toLocalFile()).is_dir():
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+
+    def dropEvent(self, event) -> None:  # noqa: N802
+        added = 0
+        for url in event.mimeData().urls():
+            if not url.isLocalFile():
+                continue
+            path = Path(url.toLocalFile()).expanduser().resolve()
+            if not path.is_dir():
+                continue
+            try:
+                workspace.add_workspace_root(path)
+                added += 1
+            except Exception as exc:  # noqa: BLE001
+                self._status(f"Drop ignored: {exc}")
+        if added:
+            self._reload_workspace_packages()
+            self._status(f"Workspace updated from dropped folder(s): {added}")
+
+    def _editor_load_current_package(self, *_args) -> None:
+        pkg = self._combo_package(self.pkg_combo)
+        if pkg:
+            self._editor_load_package(pkg)
+
+    def _editor_load_package(self, package: RosPackage | str | Path) -> None:
+        if isinstance(package, RosPackage):
+            pkg = package
+        else:
+            try:
+                pkg = workspace.resolve_package_ref(package, base_dir=Path.cwd())
+            except FileNotFoundError:
+                return
+        if not pkg.path.is_dir():
+            return
+        self._editor_pkg = load_package(pkg.path)
         self._editor_rel = None
         self._all_files = list(self._editor_pkg.files)
         self.pkg_meta.setText(
             f"{self._editor_pkg.name}\n{len(self._all_files)} files\n{self._editor_pkg.path}"
         )
+        workspace.set_active_package(self._editor_pkg.path)
         self.file_filter.blockSignals(True)
         self.file_filter.clear()
         self.file_filter.blockSignals(False)
         self._refresh_file_list()
         if hasattr(self, "demo_combo"):
-            idx = self.demo_combo.findText(name)
+            idx = self.demo_combo.findData(self._package_key(self._editor_pkg))
             if idx >= 0:
                 self.demo_combo.setCurrentIndex(idx)
+        if hasattr(self, "pkg_combo"):
+            idx = self.pkg_combo.findData(self._package_key(self._editor_pkg))
+            if idx >= 0 and self.pkg_combo.currentIndex() != idx:
+                self.pkg_combo.blockSignals(True)
+                self.pkg_combo.setCurrentIndex(idx)
+                self.pkg_combo.blockSignals(False)
         prefer = (
             next((f for f in self._all_files if f.endswith("teleop.py")), None)
             or next((f for f in self._all_files if f == "package.xml"), None)
@@ -623,7 +836,7 @@ class MainWindow(QMainWindow):
         )
         if prefer:
             self._open_file(prefer)
-        self._status(f"Opened package {name}")
+        self._status(f"Opened package {self._editor_pkg.name}")
 
     def _refresh_file_list(self) -> None:
         query = self.file_filter.text().strip().lower() if hasattr(self, "file_filter") else ""
@@ -681,9 +894,10 @@ class MainWindow(QMainWindow):
         self.sl_az.setValue(0)
 
     def sim_run(self) -> None:
-        demo = self.demo_combo.currentText() or self._active_package_name()
-        path = DEMOS_ROOT / demo
-        SESSION.start(demo, path if path.is_dir() else None)
+        pkg = self._combo_package(self.demo_combo) or self._active_package()
+        demo = pkg.name if pkg else self._active_package_name()
+        path = pkg.path if pkg else None
+        SESSION.start(demo, path if path and path.is_dir() else None)
         self.canvas.clear_trail()
         self._sim_running = True
         self._timer.start(50)
@@ -717,17 +931,27 @@ class MainWindow(QMainWindow):
         status = SESSION.status()
         self.reload_label.setText(str(status.get("reload_count", 0)))
 
-    def _open_selected_demo(self) -> None:
+    def _selected_package_from_list(self) -> RosPackage | None:
         item = self.demo_list.currentItem()
-        name = item.text() if item else self.demo_combo.currentText()
-        idx = self.pkg_combo.findText(name)
+        if item:
+            key = item.data(Qt.ItemDataRole.UserRole)
+            if key:
+                return self._package_by_path.get(str(key))
+        return self._combo_package(self.demo_combo) or self._active_package()
+
+    def _open_selected_package(self) -> None:
+        pkg = self._selected_package_from_list()
+        if not pkg:
+            return
+        idx = self.pkg_combo.findData(self._package_key(pkg))
         if idx >= 0:
             self.pkg_combo.setCurrentIndex(idx)
 
-    def _run_selected_demo(self) -> None:
-        item = self.demo_list.currentItem()
-        name = item.text() if item else self._active_package_name()
-        idx = self.demo_combo.findText(name)
+    def _run_selected_package(self) -> None:
+        pkg = self._selected_package_from_list()
+        if not pkg:
+            return
+        idx = self.demo_combo.findData(self._package_key(pkg))
         if idx >= 0:
             self.demo_combo.setCurrentIndex(idx)
         self.sim_run()
@@ -744,13 +968,16 @@ class MainWindow(QMainWindow):
             self._status(f"Mesh create failed: {exc}")
 
     def _build_robot(self) -> None:
-        demo = self._active_package_name()
+        pkg = self._active_package()
+        demo = pkg.name if pkg else self._active_package_name()
         try:
-            result = models3d.build_aligned_robot(demo)
+            target = str(pkg.path) if pkg else demo
+            result = models3d.build_aligned_robot(target, kind=demo)
             self._status(
                 f"Built 3D robot for {result['package']}: {result['links']} links"
             )
-            self._editor_load_package(demo)
+            if pkg:
+                self._editor_load_package(pkg)
         except Exception as exc:  # noqa: BLE001
             self._status(f"Build robot failed: {exc}")
 
@@ -804,7 +1031,19 @@ class MainWindow(QMainWindow):
             self._status(f"Docker stop failed: {exc}")
 
     def _docker_launch_active(self) -> None:
-        demo = self._active_package_name()
+        pkg = self._active_package()
+        demo = pkg.name if pkg else self._active_package_name()
+        if pkg:
+            try:
+                pkg.path.resolve().relative_to(DEMOS_ROOT.resolve())
+            except ValueError:
+                msg = (
+                    "Docker launch currently uses the mounted bundled package tree. "
+                    "Run native sim for external workspace packages."
+                )
+                self.docker_info.setPlainText(msg)
+                self._status(msg)
+                return
         try:
             result = docker_bridge.launch_demo(demo)
             self.docker_info.setPlainText(str(result))
@@ -833,7 +1072,14 @@ class MainWindow(QMainWindow):
 
     def _goto(self, key: str) -> None:
         """Compatibility hook for screenshot automation."""
-        mapping = {"demos": 0, "models": 1, "packages": 2, "ros2": 3, "docker": 3}
+        mapping = {
+            "workspace": 0,
+            "demos": 0,
+            "models": 1,
+            "packages": 2,
+            "ros2": 3,
+            "docker": 3,
+        }
         if key in mapping:
             self.ops_tabs.setCurrentIndex(mapping[key])
         elif key == "sim":

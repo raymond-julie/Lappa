@@ -28,9 +28,9 @@
 
 - [x] Live Docker `ros2 launch` session bridge (IDE mount + launch_demo) — 2026-07-13
 - [x] Qt Editor page open/edit/save package sources — 2026-07-13
+- [x] Multi-package workspace roots + package discovery — 2026-07-14
 - Topic graph panel (nodes / topics)
 - Import external OBJ/STL with material colors
-- Multi-package workspaces
 
 ## Later
 

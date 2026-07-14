@@ -2,3 +2,5 @@
 max_linear: 1.0
 max_angular: 1.5
 lidar_rays: 36
+# cycle_20260714c
+joint_smooth_factor: 0.85

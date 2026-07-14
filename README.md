@@ -11,9 +11,9 @@
 
 | Surface | Role |
 | --- | --- |
-| **Qt desktop IDE** (`lappa-gui`) | Editor page + Simulation + Docker bridge controls |
+| **Qt desktop IDE** (`lappa-gui`) | Workspace package explorer + editor + simulation + Docker controls |
 | **Native sim** | Offline kinematics when Docker is unavailable |
-| **Docker** | Real ROS2 distro; `packages/demos` → `/ws/src` for IDE↔container bridge |
+| **Docker** | Real ROS2 distro; bundled sample packages mount into `/ws/src` for IDE↔container bridge |
 
 **Product:** [mergeos-bounties/Lappa](https://github.com/mergeos-bounties/Lappa)
 
@@ -43,12 +43,12 @@
 
 | Capability | What you get |
 | --- | --- |
-| **Package IDE (open/edit)** | Qt package editor — open demo tree, edit, Ctrl+S / Save |
+| **Package IDE (open/edit)** | Qt package editor — open workspace package trees, edit, Ctrl+S / Save |
 | **IDE ↔ Docker bridge** | `lappa docker launch --demo <pkg>` runs `sim.launch.py` on mounted sources |
 | **Offline native sim** | Diff-drive, omni, tricycle, ackermann, planar arm — pose, twist, lidar, joints |
 | **Lidar obstacles** | Default obstacle map for denser synthetic scans |
 | **3D mesh fit** | Procedural OBJ library + AABB fit + multi-link `build-robot` |
-| **No host ROS2 required** | Demos + editor work without ROS2 desktop; Docker optional |
+| **No host ROS2 required** | Workspace editing + native sim without ROS2 desktop; Docker optional |
 | **Multi-distro targets** | Humble · Iron · Jazzy · Kilted · Rolling (Dockerfile rewrite) |
 | **Package bundler** | Zip packages with `lappa_manifest.json` for colcon |
 | **CLI + API** | `lappa` Typer CLI; FastAPI for IDE automation |
@@ -72,9 +72,9 @@ lappa gui
 
 | Nav page | Purpose |
 | --- | --- |
-| **Editor** | **Open package files, edit, save** — same tree Docker mounts at `/ws/src` |
+| **Workspace** | Add folders/packages, refresh scan, open package roots discovered by `package.xml` |
+| **Editor** | **Open package files, edit, save** from the active workspace package |
 | **Simulation** | Start/stop **native** sim, teleop, 2D canvas + lidar, trajectory |
-| **Demos** | Pick `diff_drive_2w`, `omni_3w`, `tricycle_3w`, `ackermann_4w`, `simple_arm` |
 | **3D models** | Build aligned multi-link robot meshes for a demo package |
 | **Packages** | List / create colcon-ready zip bundles |
 | **ROS2 / Docker** | Distro select, start container, **launch package sim in Docker** |
@@ -85,9 +85,9 @@ lappa gui
 <p align="center"><em>Simulation — native kinematics canvas</em></p>
 
 <p align="center">
-  <img src="docs/screenshots/gui-demos.png" alt="Lappa GUI — Demos" width="100%" />
+  <img src="docs/screenshots/gui-demos.png" alt="Lappa GUI — Workspace" width="100%" />
 </p>
-<p align="center"><em>Robot demos</em></p>
+<p align="center"><em>Workspace packages</em></p>
 
 <p align="center">
   <img src="docs/screenshots/gui-models.png" alt="Lappa GUI — 3D models" width="100%" />
@@ -163,8 +163,10 @@ lappa serve --port 8840   # optional local FastAPI automation API
 | `lappa demo` | Offline smoke: engines + 3D robot + bundle + trajectory |
 | `lappa gui` / **`lappa-gui`** | **Qt desktop app** (needs `.[gui]`) |
 | `lappa demos list` | List robot demos |
-| `lappa workspace open <path\|demo>` | Set active package |
-| `lappa sim start --demo <id>` | Start native sim session |
+| `lappa workspace list \| roots \| add \| remove \| new` | Manage multi-package workspace roots |
+| `lappa workspace open <path\|name>` | Set active package |
+| `lappa sim start --package <path\|name>` | Start native sim for a workspace package |
+| `lappa sim start --demo <id>` | Start native sim by sample/demo id |
 | `lappa sim status` | Session status |
 | `lappa ros2 list \| set \| get` | Target ROS2 distro |
 | `lappa package list \| bundle \| bundles` | Colcon-ready zip packs |
@@ -179,7 +181,10 @@ lappa serve --port 8840   # optional local FastAPI automation API
 
 ```powershell
 lappa demos list
-lappa workspace open demos/diff_drive_2w
+lappa workspace add C:\ros2_ws\src
+lappa workspace list
+lappa workspace open diff_drive_2w
+lappa sim start --package diff_drive_2w
 lappa sim start --demo diff_drive_2w
 lappa ros2 set jazzy
 lappa package bundle -p diff_drive_2w -p omni_3w --distro humble

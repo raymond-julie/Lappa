@@ -14,12 +14,17 @@ def test_health():
     body = r.json()
     assert body["ok"] is True
     assert "diff_drive_2w" in body["demos"]
+    assert "diff_drive_2w" in body["packages"]
 
 
 def test_demos_and_sim():
     r = client.get("/api/demos")
     assert r.status_code == 200
     assert len(r.json()) >= 5
+
+    r = client.get("/api/workspace/packages")
+    assert r.status_code == 200
+    assert any(pkg["name"] == "diff_drive_2w" for pkg in r.json())
 
     r = client.post("/api/sim/start", json={"demo": "diff_drive_2w"})
     assert r.status_code == 200

@@ -57,7 +57,7 @@ lappa-windows-x64.exe
 lappa_data/
   demos/          # copied once from bundle
   docker/
-  workspaces/     # bundles, meshes library, ros2_version.json
+  workspaces/     # workspace.json, bundles, meshes library, ros2_version.json
 ```
 
 Override with env `LAPPA_HOME=/path/to/data`.
@@ -69,6 +69,8 @@ lappa.exe                 # desktop Qt IDE
 lappa.exe desktop
 lappa.exe serve --port 8840   # optional automation API
 lappa.exe demo
+lappa.exe workspace list
+lappa.exe workspace add C:\ros2_ws\src
 lappa.exe ros2 list
 lappa.exe package bundle -p diff_drive_2w
 lappa.exe version

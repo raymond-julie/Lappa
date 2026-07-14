@@ -8,8 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from lappa.config import DEMOS_ROOT, WORKSPACES, ensure_dirs
-from lappa.package_loader import list_demo_packages
+from lappa import workspace as workspace_store
+from lappa.config import WORKSPACES, ensure_dirs
 from lappa.ros2_versions import get_selected, get_version
 
 
@@ -21,7 +21,7 @@ def _bundle_root() -> Path:
 
 
 def list_bundleable() -> list[dict[str, Any]]:
-    packs = list_demo_packages(DEMOS_ROOT)
+    packs = workspace_store.workspace_packages()
     return [
         {
             "name": p.name,
@@ -56,12 +56,22 @@ def package_bundle(
         selected = get_selected()
     distro_id = selected["id"]
 
-    available = {p.name: p for p in list_demo_packages(DEMOS_ROOT)}
-    names = package_names or list(available.keys())
-    missing = [n for n in names if n not in available]
+    available = {p.name: p for p in workspace_store.workspace_packages()}
+    requested = package_names or list(available.keys())
+    selected_packages = []
+    missing = []
+    for name in requested:
+        try:
+            selected_packages.append(workspace_store.resolve_package_ref(name, base_dir=Path.cwd()))
+        except FileNotFoundError:
+            pkg = available.get(name)
+            if pkg:
+                selected_packages.append(pkg)
+            else:
+                missing.append(name)
     if missing:
-        # also allow absolute path packages later
         raise ValueError(f"unknown packages: {missing}")
+    names = [pkg.name for pkg in selected_packages]
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     base = out_name or f"lappa_{distro_id}_{'_'.join(names[:3])}{'_etc' if len(names) > 3 else ''}_{stamp}"
@@ -83,8 +93,8 @@ def package_bundle(
     }
 
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for name in names:
-            pkg = available[name]
+        for pkg in selected_packages:
+            name = pkg.name
             prefix = f"src/{name}"
             file_count = 0
             for path, rel in _iter_files(pkg.path):
@@ -156,10 +166,4 @@ def list_bundles() -> list[dict[str, Any]]:
 
 
 def resolve_package_path(name_or_path: str) -> Path:
-    p = Path(name_or_path)
-    if p.is_dir():
-        return p.resolve()
-    cand = DEMOS_ROOT / name_or_path
-    if cand.is_dir():
-        return cand.resolve()
-    raise FileNotFoundError(name_or_path)
+    return workspace_store.resolve_package_ref(name_or_path, base_dir=Path.cwd()).path
