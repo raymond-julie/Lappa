@@ -1,0 +1,32 @@
+{
+  "name": "spiral_in_path",
+  "points": [
+    [
+      0,
+      0
+    ],
+    [
+      2,
+      0
+    ],
+    [
+      2,
+      2
+    ],
+    [
+      0,
+      2
+    ],
+    [
+      0,
+      1
+    ],
+    [
+      1,
+      1
+    ]
+  ],
+  "path_length_m": 8.0,
+  "expected_net_displacement_m": 1.4142135623730951,
+  "note": "Spiral-in corridor path"
+}
