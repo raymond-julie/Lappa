@@ -3,7 +3,7 @@
 STYLESHEET = """
 * {
   font-family: "Segoe UI", "Inter", sans-serif;
-  font-size: 13px;
+  font-size: 12px;
   color: #e6edf3;
 }
 
@@ -17,9 +17,13 @@ QFrame#topbar {
 }
 
 QLabel#brand {
-  font-size: 21px;
+  font-size: 16px;
   font-weight: 800;
   color: #f8fafc;
+}
+
+QLabel#brandSub {
+  font-size: 11px;
 }
 
 QLabel#brandSub, QLabel#muted, QLabel#metricTitle {
@@ -28,7 +32,7 @@ QLabel#brandSub, QLabel#muted, QLabel#metricTitle {
 
 QLabel#sectionTitle {
   color: #dbeafe;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -36,20 +40,21 @@ QLabel#sectionTitle {
 
 QLabel#panelTitle {
   color: #f8fafc;
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 800;
 }
 
 QLabel#panelTitleSmall {
   color: #f8fafc;
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 800;
+  text-transform: uppercase;
 }
 
 QLabel#pathLabel {
   color: #7dd3fc;
   font-family: "Cascadia Mono", "Consolas", monospace;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 QLabel#statePill {
@@ -105,8 +110,8 @@ QPushButton {
   background: #1f2937;
   color: #e5e7eb;
   border: 1px solid #334155;
-  border-radius: 7px;
-  padding: 8px 12px;
+  border-radius: 5px;
+  padding: 5px 9px;
   font-weight: 700;
 }
 
@@ -127,14 +132,14 @@ QPushButton[primary="true"]:hover {
 }
 
 QPushButton[compact="true"] {
-  padding: 6px 9px;
+  padding: 3px 8px;
 }
 
 QToolButton {
   background: transparent;
   color: #94a3b8;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: 5px;
   font-weight: 800;
 }
 
@@ -147,8 +152,8 @@ QToolButton:hover {
 QLineEdit, QComboBox, QTextEdit, QListWidget, QTreeWidget, QPlainTextEdit {
   background: #0f172a;
   border: 1px solid #263449;
-  border-radius: 7px;
-  padding: 6px 9px;
+  border-radius: 5px;
+  padding: 4px 6px;
   selection-background-color: #2563eb;
 }
 
@@ -160,8 +165,8 @@ QPlainTextEdit#codeEditor {
   background: #080d18;
   color: #e5edf7;
   border: 1px solid #263449;
-  border-radius: 8px;
-  padding: 10px;
+  border-radius: 5px;
+  padding: 8px;
   font-family: "Cascadia Mono", "Consolas", monospace;
 }
 
@@ -179,9 +184,9 @@ QTextEdit#aiChat {
 }
 
 QListWidget::item, QTreeWidget::item {
-  min-height: 24px;
-  padding: 6px;
-  border-radius: 5px;
+  min-height: 18px;
+  padding: 3px;
+  border-radius: 3px;
 }
 
 QTreeWidget#fileTree {
@@ -195,7 +200,7 @@ QListWidget::item:selected, QTreeWidget::item:selected {
 
 QTabWidget#opsTabs::pane {
   border: 1px solid #263449;
-  border-radius: 8px;
+  border-radius: 5px;
   top: -1px;
   background: #0f172a;
 }
@@ -204,10 +209,10 @@ QTabBar::tab {
   background: #111827;
   color: #94a3b8;
   border: 1px solid #263449;
-  padding: 7px 12px;
-  margin-right: 3px;
-  border-top-left-radius: 7px;
-  border-top-right-radius: 7px;
+  padding: 5px 10px;
+  margin-right: 2px;
+  border-top-left-radius: 5px;
+  border-top-right-radius: 5px;
 }
 
 QTabBar::tab:selected {
