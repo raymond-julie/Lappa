@@ -1,0 +1,27 @@
+{
+  "name": "corridor_loop",
+  "points": [
+    [
+      0,
+      0
+    ],
+    [
+      1,
+      0
+    ],
+    [
+      1,
+      1
+    ],
+    [
+      0,
+      1
+    ],
+    [
+      0,
+      0
+    ]
+  ],
+  "expected_net_displacement_m": 0.0,
+  "note": "Closed loop for path_efficiency regression"
+}
