@@ -8,7 +8,7 @@ Full product documentation: **[../../README.md](../../README.md)** (architecture
 
 ```bash
 pip install -e ".[dev,gui,api]"
-lappa version   # 0.4.25
+lappa version   # 0.4.26
 lappa demo
 lappa-gui
 ```
