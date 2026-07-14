@@ -5,7 +5,7 @@
 </p>
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![Version](https://img.shields.io/badge/version-0.4.30-0E8A16.svg)](packages/server/pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.4.31-0E8A16.svg)](packages/server/pyproject.toml)
 [![GUI-PySide6](https://img.shields.io/badge/GUI-PySide6-41CD52.svg)](packages/server/src/lappa/gui/)
 [![ROS2](https://img.shields.io/badge/ROS2-Humble%20%7C%20Jazzy%20%7C%20Rolling-22314E.svg)](https://docs.ros.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -216,7 +216,7 @@ lappa serve --port 8840   # optional local FastAPI automation API
 
 | Command | Description |
 | --- | --- |
-| `lappa version` | Package version (**0.4.30**) |
+| `lappa version` | Package version (**0.4.31**) |
 | `lappa demo` | Offline smoke: engines + 3D robot + bundle + trajectory |
 | `lappa gui` / **`lappa-gui`** | **Qt desktop app** (needs `.[gui]`) |
 | `lappa demos list` | List robot demos |
@@ -427,7 +427,7 @@ Without Docker, **native kinematics sim** still runs offline (`lappa sim start`)
 
 ## Download binaries
 
-Download [Lappa v0.4.30](https://github.com/mergeos-bounties/Lappa/releases/tag/v0.4.30) from GitHub Releases:
+Download [Lappa v0.4.31](https://github.com/mergeos-bounties/Lappa/releases/tag/v0.4.31) from GitHub Releases:
 
 | File | Platform |
 | --- | --- |

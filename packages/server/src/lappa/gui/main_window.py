@@ -914,10 +914,13 @@ class SimCanvas(QWidget):
         painter.setPen(QColor("#4ade80"))
         status = "BLOCKED" if bool(self.state.get("collision")) else "OK"
         source = "SLAM" if self.map_source == "slam_toolbox" else "PREVIEW"
+        known_cells = int(
+            self.map_metadata.get("known_cells") or len(self.mapped_cells)
+        )
         painter.drawText(
             20,
             50,
-            f"TF {status}   {source} /map   {len(self.mapped_cells)} known",
+            f"TF {status}   {source} /map   {known_cells} known",
         )
 
         pose_text = f"{kind}   x {x:.2f}   y {y:.2f}   yaw {theta:.2f}"
@@ -3148,6 +3151,9 @@ class MainWindow(QMainWindow):
                 "ROS2  /scan -> SLAM Toolbox -> /map"
             )
             self.sim_state_pill.setText("SLAM Live")
+            self.statusBar().showMessage(
+                f"SLAM live: /map {width}x{height} from tricycle_3w"
+            )
 
             pose = snapshot.get("pose") or {}
             twist = snapshot.get("twist") or {}
@@ -3241,6 +3247,7 @@ class MainWindow(QMainWindow):
         self.slam_status_label.setText(f"ROS2  LIVE  {topics}")
         self.keyboard_status.setText("ROS2 telemetry connected")
         self.sim_state_pill.setText("ROS2 Live")
+        self.statusBar().showMessage(f"ROS2 live telemetry for {package.name}")
         return True
 
     def _tick_sim(self) -> None:

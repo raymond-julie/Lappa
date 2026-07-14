@@ -13,6 +13,7 @@ from tricycle_3w.teleop import (  # noqa: E402
     OccupancyWorld,
     WAREHOUSE_WAYPOINTS,
 )
+from tricycle_3w.slam_bridge import _display_map_cells  # noqa: E402
 
 
 def test_clearpath_warehouse_world_loads_with_ros_metadata():
@@ -43,3 +44,21 @@ def test_warehouse_assets_preserve_upstream_attribution():
 
     assert "clearpathrobotics/clearpath_nav2_demos" in source
     assert (DEMO_ROOT / "worlds" / "LICENSE-BSD-3-CLAUSE.txt").is_file()
+
+
+def test_slam_bridge_keeps_walls_and_samples_free_cells():
+    values = [0] * 10_000
+    values[123] = 100
+    values[9_999] = -1
+
+    cells, occupied, free, stride = _display_map_cells(
+        values,
+        width=100,
+        target_cells=100,
+    )
+
+    assert occupied == 1
+    assert free == 9_998
+    assert stride > 1
+    assert [23, 1, 100] in cells
+    assert len(cells) <= 110

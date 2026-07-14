@@ -11,7 +11,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QSettings, Qt  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtWidgets import QApplication, QPushButton, QToolButton  # noqa: E402
 
 from lappa.config import DEMOS_ROOT  # noqa: E402
 from lappa.gui.main_window import MainWindow, SimCanvas  # noqa: E402
@@ -28,6 +28,32 @@ def _docker_unavailable() -> dict:
         "ready_for_launch": False,
         "session": {"mode": "idle", "running": False},
     }
+
+
+def test_workbench_buttons_expose_tooltips_and_accessible_names(
+    tmp_path, monkeypatch
+):
+    app = QApplication.instance() or QApplication([])
+    monkeypatch.setattr("lappa.gui.main_window.docker_bridge.status", _docker_unavailable)
+    settings = QSettings(str(tmp_path / "tooltips.ini"), QSettings.Format.IniFormat)
+    window = MainWindow(show_welcome=False, settings=settings)
+
+    push_buttons = [button for button in window.findChildren(QPushButton) if button.text()]
+    tool_buttons = [
+        button
+        for button in window.findChildren(QToolButton)
+        if not button.objectName().startswith("Scroll")
+    ]
+
+    assert push_buttons
+    assert tool_buttons
+    assert all(button.toolTip().strip() for button in push_buttons)
+    assert all(button.accessibleName().strip() for button in push_buttons)
+    assert all(button.toolTip().strip() for button in tool_buttons)
+    assert all(button.accessibleName().strip() for button in tool_buttons)
+
+    window.close()
+    app.processEvents()
 
 
 def test_keyboard_drives_native_tricycle_and_forwards_twist(tmp_path, monkeypatch):

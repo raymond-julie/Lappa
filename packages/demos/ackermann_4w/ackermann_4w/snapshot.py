@@ -27,10 +27,11 @@ class SnapshotWriter:
             "updated_at": time.time(),
             "state": state,
         }
+        serialized = json.dumps(payload, separators=(",", ":"))
         temporary = self.path.with_suffix(".tmp")
-        temporary.write_text(
-            json.dumps(payload, separators=(",", ":")),
-            encoding="utf-8",
-        )
-        os.replace(temporary, self.path)
-
+        temporary.write_text(serialized, encoding="utf-8")
+        try:
+            os.replace(temporary, self.path)
+        except OSError:
+            self.path.write_text(serialized, encoding="utf-8")
+            temporary.unlink(missing_ok=True)

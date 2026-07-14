@@ -14,6 +14,27 @@ def _quaternion_yaw(z: float, w: float) -> float:
     return 2.0 * math.atan2(float(z), float(w))
 
 
+def _display_map_cells(
+    values,
+    width: int,
+    target_cells: int = 16_000,
+) -> tuple[list[list[int]], int, int, int]:
+    """Keep occupied cells and sample free space for a responsive viewport."""
+    occupied = sum(1 for value in values if int(value) >= 50)
+    free = sum(1 for value in values if 0 <= int(value) < 50)
+    free_budget = max(1, target_cells - occupied)
+    stride = max(1, math.ceil(math.sqrt(max(1, free) / free_budget)))
+    cells: list[list[int]] = []
+    for index, raw_value in enumerate(values):
+        value = int(raw_value)
+        if value < 0:
+            continue
+        row, column = divmod(index, width)
+        if value >= 50 or (column % stride == 0 and row % stride == 0):
+            cells.append([column, row, value])
+    return cells, occupied, free, stride
+
+
 def main() -> None:
     try:
         import rclpy
@@ -73,19 +94,10 @@ def main() -> None:
         def _on_map(self, message: OccupancyGrid) -> None:
             width = int(message.info.width)
             height = int(message.info.height)
-            cells: list[list[int]] = []
-            occupied = 0
-            free = 0
-            for index, raw_value in enumerate(message.data):
-                value = int(raw_value)
-                if value < 0:
-                    continue
-                row, column = divmod(index, width)
-                cells.append([column, row, value])
-                if value >= 50:
-                    occupied += 1
-                else:
-                    free += 1
+            cells, occupied, free, display_stride = _display_map_cells(
+                message.data,
+                width,
+            )
             known = occupied + free
             total = max(1, width * height)
             orientation = message.info.origin.orientation
@@ -103,6 +115,7 @@ def main() -> None:
                 "occupied_cells": occupied,
                 "free_cells": free,
                 "coverage_percent": known / total * 100.0,
+                "display_stride": display_stride,
                 "cells": cells,
             }
 
@@ -139,12 +152,16 @@ def main() -> None:
                     "scan_frame": self.scan_frame,
                 },
             }
+            serialized = json.dumps(snapshot, separators=(",", ":"))
             temporary = self.snapshot_path.with_suffix(".tmp")
-            temporary.write_text(
-                json.dumps(snapshot, separators=(",", ":")),
-                encoding="utf-8",
-            )
-            os.replace(temporary, self.snapshot_path)
+            temporary.write_text(serialized, encoding="utf-8")
+            try:
+                os.replace(temporary, self.snapshot_path)
+            except OSError:
+                # Docker Desktop bind mounts can reject replacement of a file
+                # that the Windows host recently read. Keep the bridge alive.
+                self.snapshot_path.write_text(serialized, encoding="utf-8")
+                temporary.unlink(missing_ok=True)
 
     rclpy.init(args=sys.argv)
     node = SlamBridgeNode()
