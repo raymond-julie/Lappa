@@ -1,0 +1,32 @@
+{
+  "name": "stairs_step_path",
+  "points": [
+    [
+      0,
+      0
+    ],
+    [
+      0,
+      3
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      2,
+      1
+    ],
+    [
+      4,
+      1
+    ],
+    [
+      4,
+      4
+    ]
+  ],
+  "path_length_m": 12.0,
+  "expected_net_displacement_m": 5.656854249492381,
+  "note": "Stair-step warehouse path"
+}
