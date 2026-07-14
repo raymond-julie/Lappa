@@ -2,3 +2,5 @@
 max_linear: 1.0
 max_angular: 1.5
 lidar_rays: 36
+# cycle_20260714b: tune sim telemetry publish rate
+telemetry_hz: 20
