@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from lappa.export.csv import trajectory_csv_text
 from lappa.package_loader import RosPackage, load_package
 from lappa.sim.engines import BaseEngine, create_engine
 
@@ -162,6 +163,10 @@ class SimSession:
                     f"{r['linear_x']},{r['linear_y']},{r['angular_z']},{r['demo']}"
                 )
             return "\n".join(lines) + ("\n" if lines else "")
+
+    def trajectory_rich_csv(self) -> str:
+        with self._lock:
+            return trajectory_csv_text(self.trajectory)
 
     def clear_trajectory(self) -> None:
         with self._lock:

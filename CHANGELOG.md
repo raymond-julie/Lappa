@@ -10,6 +10,8 @@ All notable Lappa desktop IDE changes are recorded here.
 - RViz-style native simulation view with orbit, top, and follow cameras.
 - Layered Docker diagnostics for CLI, engine, Compose, image, health, and ROS2 launch.
 - Text and 3D preview for OBJ, STL, DAE, and URDF files in the editor.
+- Rich trajectory CSV export with velocity, acceleration, jerk, and rotation columns.
+- `list-demos` compatibility command integrated into the primary Typer CLI.
 
 ### Changed
 

@@ -115,6 +115,44 @@ def demos_list() -> None:
     console.print(table)
 
 
+@app.command("list-demos")
+def list_demos_compat(
+    path: Path | None = typer.Option(
+        None,
+        "--path",
+        "-p",
+        help="Repository root to scan. Omit to list bundled demos.",
+    ),
+) -> None:
+    """List demo packages and their paths (compatibility command)."""
+    if path is None:
+        discovered = [(pkg.name, pkg.path) for pkg in list_demo_packages(DEMOS_ROOT)]
+    else:
+        packages_dir = path.resolve() / "packages"
+        if not packages_dir.is_dir():
+            rprint(f"No packages directory found at {packages_dir}")
+            return
+        discovered = [
+            (demo.parent.name, demo)
+            for demo in sorted(packages_dir.glob("*/demo"))
+            if demo.is_dir()
+        ]
+        demos_dir = packages_dir / "demos"
+        if demos_dir.is_dir():
+            discovered.extend(
+                (package.name, package)
+                for package in sorted(demos_dir.iterdir())
+                if package.is_dir() and (package / "package.xml").is_file()
+            )
+
+    if not discovered:
+        rprint("No demo packages found.")
+        return
+    rprint(f"Found {len(discovered)} demo package(s):")
+    for name, demo_path in discovered:
+        print(f"{name}\t{demo_path}")
+
+
 @workspace_app.command("open")
 def workspace_open(path: Path) -> None:
     pkg = workspace_store.resolve_package_ref(path, base_dir=Path.cwd())
@@ -267,9 +305,14 @@ def demos_info(
 @sim_app.command("trajectory")
 def sim_trajectory(
     out: Path | None = typer.Option(None, "--out", "-o", help="Write CSV path"),
+    rich_columns: bool = typer.Option(
+        False,
+        "--rich",
+        help="Export velocity, acceleration, jerk, and 3D rotation columns.",
+    ),
 ) -> None:
     """Export recorded odom trail as CSV."""
-    csv = SESSION.trajectory_csv()
+    csv = SESSION.trajectory_rich_csv() if rich_columns else SESSION.trajectory_csv()
     if out:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(csv, encoding="utf-8")

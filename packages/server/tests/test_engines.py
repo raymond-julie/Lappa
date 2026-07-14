@@ -60,6 +60,9 @@ def test_trajectory_csv():
     csv = s.trajectory_csv()
     assert "t,x,y,theta" in csv
     assert csv.count("\n") >= 3
+    rich_csv = s.trajectory_rich_csv()
+    assert "timestamp,x,y,z,velocity,acceleration,jerk" in rich_csv
+    assert rich_csv.count("\n") >= 3
     # pose must advance without manual clock hacking
     assert s.engine is not None
     assert s.engine.state.x != 0.0 or s.engine.state.theta != 0.0

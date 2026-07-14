@@ -205,11 +205,13 @@ lappa serve --port 8840   # optional local FastAPI automation API
 | `lappa demo` | Offline smoke: engines + 3D robot + bundle + trajectory |
 | `lappa gui` / **`lappa-gui`** | **Qt desktop app** (needs `.[gui]`) |
 | `lappa demos list` | List robot demos |
+| `lappa list-demos --path <root>` | Compatibility scan for repository demo folders |
 | `lappa workspace list \| roots \| add \| remove \| new` | Manage multi-package workspace roots |
 | `lappa workspace open <path\|name>` | Set active package |
 | `lappa sim start --package <path\|name>` | Start native sim for a workspace package |
 | `lappa sim start --demo <id>` | Start native sim by sample/demo id |
 | `lappa sim status` | Session status |
+| `lappa sim trajectory --rich` | Export velocity, acceleration, jerk, and rotation CSV |
 | `lappa ros2 list \| set \| get` | Target ROS2 distro |
 | `lappa package list \| bundle \| bundles` | Colcon-ready zip packs |
 | `lappa model presets \| create \| list` | Procedural OBJ library |
