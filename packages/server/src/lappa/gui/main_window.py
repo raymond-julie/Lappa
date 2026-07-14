@@ -7,11 +7,13 @@ from pathlib import Path
 
 from PySide6.QtCore import QPointF, QSize, Qt, QTimer
 from PySide6.QtGui import (
+    QAction,
     QBrush,
     QColor,
     QFont,
     QFontDatabase,
     QIcon,
+    QKeySequence,
     QPainter,
     QPen,
     QPixmap,
@@ -503,6 +505,7 @@ class MainWindow(QMainWindow):
         self._package_labels: dict[str, str] = {}
         self._editor_pkg: RosPackage | None = None
         self._editor_rel: str | None = None
+        self._editor_dirty = False
         self._all_files: list[str] = []
         self._all_dirs: list[str] = []
         self._ai_turns: list[tuple[str, str]] = []
@@ -527,6 +530,10 @@ class MainWindow(QMainWindow):
         root.addWidget(workspace_area, 1)
 
         self.setStatusBar(QStatusBar())
+        self.cursor_label = QLabel("Ln 1, Col 1 | Saved")
+        self.cursor_label.setObjectName("statusInfo")
+        self.statusBar().addPermanentWidget(self.cursor_label)
+        self._install_shortcuts()
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick_sim)
         self._resize_timer = QTimer(self)
@@ -736,6 +743,8 @@ class MainWindow(QMainWindow):
         mono = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
         mono.setPointSize(11)
         self.ed_text.setFont(mono)
+        self.ed_text.textChanged.connect(self._mark_editor_dirty)
+        self.ed_text.cursorPositionChanged.connect(self._update_cursor_status)
 
         self.editor_view_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.editor_view_splitter.setObjectName("editorViewSplitter")
@@ -1001,6 +1010,23 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(msg)
         self._log(msg)
 
+    def _install_shortcuts(self) -> None:
+        shortcuts = [
+            ("Ctrl+S", self._editor_save, "Save active file"),
+            ("Ctrl+R", self._editor_reload, "Reload active file"),
+            ("Ctrl+O", self._add_workspace_folder, "Open workspace folder"),
+            ("Ctrl+N", self._create_new_file, "New file"),
+            ("Ctrl+Shift+N", self._create_new_folder, "New folder"),
+            ("F5", self.sim_run, "Run native simulation"),
+            ("Shift+F5", self.sim_stop, "Stop native simulation"),
+            ("Ctrl+Shift+A", self._focus_ai_panel, "Focus AI chat"),
+        ]
+        for sequence, slot, label in shortcuts:
+            action = QAction(label, self)
+            action.setShortcut(QKeySequence(sequence))
+            action.triggered.connect(lambda _checked=False, slot=slot: slot())
+            self.addAction(action)
+
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
         if hasattr(self, "_resize_timer"):
@@ -1023,6 +1049,62 @@ class MainWindow(QMainWindow):
             self.ops_tabs.setCurrentIndex(0)
         if hasattr(self, "ai_input"):
             self.ai_input.setFocus()
+
+    def _editor_display_text(self) -> str:
+        if not self._editor_pkg or not self._editor_rel:
+            return "No file open"
+        display = f"{self._editor_pkg.name}/{self._editor_rel}"
+        return f"* {display}" if self._editor_dirty else display
+
+    def _sync_editor_chrome(self) -> None:
+        display = self._editor_display_text()
+        if hasattr(self, "ed_path_label"):
+            self.ed_path_label.setText(display)
+        if hasattr(self, "header_file_label"):
+            self.header_file_label.setText(display)
+        marker = "* " if self._editor_dirty else ""
+        self.setWindowTitle(f"{marker}Lappa - ROS2 Package IDE - v{__version__}")
+        self._update_cursor_status()
+
+    def _set_editor_dirty(self, dirty: bool) -> None:
+        self._editor_dirty = dirty
+        self._sync_editor_chrome()
+
+    def _mark_editor_dirty(self) -> None:
+        if self._editor_rel and not self._editor_dirty:
+            self._set_editor_dirty(True)
+
+    def _update_cursor_status(self) -> None:
+        if not hasattr(self, "cursor_label") or not hasattr(self, "ed_text"):
+            return
+        cursor = self.ed_text.textCursor()
+        line = cursor.blockNumber() + 1
+        col = cursor.positionInBlock() + 1
+        state = "Modified" if self._editor_dirty else "Saved"
+        suffix = Path(self._editor_rel or "").suffix.lower().lstrip(".") or "text"
+        self.cursor_label.setText(f"Ln {line}, Col {col} | {suffix} | {state}")
+
+    def _confirm_editor_transition(self) -> bool:
+        if not self._editor_dirty:
+            return True
+        target = self._editor_display_text().removeprefix("* ")
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle("Unsaved changes")
+        box.setText(f"Save changes to {target}?")
+        save = box.addButton("Save", QMessageBox.ButtonRole.AcceptRole)
+        discard = box.addButton("Discard", QMessageBox.ButtonRole.DestructiveRole)
+        cancel = box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(save)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked == save:
+            self._editor_save()
+            return not self._editor_dirty
+        if clicked == discard:
+            self._set_editor_dirty(False)
+            return True
+        return clicked != cancel and not self._editor_dirty
 
     def _ai_send(self) -> None:
         if not hasattr(self, "ai_input") or not hasattr(self, "ai_log"):
@@ -1143,7 +1225,12 @@ class MainWindow(QMainWindow):
             if hasattr(self, "ed_file_tree"):
                 self.ed_file_tree.clear()
             if hasattr(self, "ed_text"):
+                self.ed_text.blockSignals(True)
                 self.ed_text.clear()
+                self.ed_text.blockSignals(False)
+            if hasattr(self, "model_preview"):
+                self.model_preview.hide()
+            self._set_editor_dirty(False)
 
     def _add_workspace_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(
@@ -1286,8 +1373,18 @@ class MainWindow(QMainWindow):
                 return
         if not pkg.path.is_dir():
             return
+        previous_key = self._package_key(self._editor_pkg) if self._editor_pkg else None
+        if self._editor_dirty and not self._confirm_editor_transition():
+            if previous_key and hasattr(self, "pkg_combo"):
+                idx = self.pkg_combo.findData(previous_key)
+                if idx >= 0:
+                    self.pkg_combo.blockSignals(True)
+                    self.pkg_combo.setCurrentIndex(idx)
+                    self.pkg_combo.blockSignals(False)
+            return
         self._editor_pkg = load_package(pkg.path)
         self._editor_rel = None
+        self._set_editor_dirty(False)
         self._all_files = list(self._editor_pkg.files)
         self._all_dirs = self._scan_package_dirs()
         self.pkg_meta.setText(
@@ -1398,13 +1495,18 @@ class MainWindow(QMainWindow):
     def _open_file(self, rel: str) -> None:
         if not self._editor_pkg:
             return
+        if rel != self._editor_rel and not self._confirm_editor_transition():
+            return
         try:
             text = read_file(self._editor_pkg, rel)
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Open failed", str(exc))
             return
         self._editor_rel = rel
+        self.ed_text.blockSignals(True)
         self.ed_text.setPlainText(text)
+        self.ed_text.blockSignals(False)
+        self._set_editor_dirty(False)
         if self._is_3d_file(rel):
             self.model_preview.show()
             self.model_preview.load_text(rel, text)
@@ -1412,13 +1514,11 @@ class MainWindow(QMainWindow):
         else:
             self.model_preview.hide()
             self.editor_view_splitter.setSizes([900, 0])
-        display = f"{self._editor_pkg.name}/{rel}"
-        self.ed_path_label.setText(display)
-        self.header_file_label.setText(display)
+        self._sync_editor_chrome()
         self._refresh_file_list()
 
     def _editor_reload(self) -> None:
-        if self._editor_rel:
+        if self._editor_rel and self._confirm_editor_transition():
             self._open_file(self._editor_rel)
 
     def _editor_save(self) -> None:
@@ -1433,7 +1533,14 @@ class MainWindow(QMainWindow):
         if self._is_3d_file(self._editor_rel):
             self.model_preview.load_text(self._editor_rel, self.ed_text.toPlainText())
         SESSION.notify_file_change(self._editor_rel)
+        self._set_editor_dirty(False)
         self._status(f"Saved {self._editor_pkg.name}/{self._editor_rel}")
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        if self._confirm_editor_transition():
+            super().closeEvent(event)
+        else:
+            event.ignore()
 
     def _editor_docker_launch(self) -> None:
         self._docker_launch_active()

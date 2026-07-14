@@ -251,6 +251,13 @@ QStatusBar {
   border-top: 1px solid #223049;
 }
 
+QLabel#statusInfo {
+  color: #9fb4cc;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 11px;
+  padding: 0 8px;
+}
+
 QSlider::groove:horizontal {
   height: 6px;
   background: #263449;

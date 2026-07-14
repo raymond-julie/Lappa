@@ -222,10 +222,10 @@ Sim state includes `x, y, theta`, `twist`, synthetic `lidar` (with obstacles), a
 
 | | |
 | :---: | :---: |
-| ![Diff drive](docs/screenshots/sim-diff-drive.png) | ![Omni](docs/screenshots/sim-omni-3w.png) |
-| *Diff drive (legacy web capture)* | *Omni 3W* |
-| ![Tricycle](docs/screenshots/sim-tricycle.png) | ![Arm](docs/screenshots/sim-arm.png) |
-| *Tricycle* | *Planar arm* |
+| ![Live simulation](docs/screenshots/gui-sim.png) | ![3D models](docs/screenshots/gui-models.png) |
+| *Qt IDE live simulation beside the editor* | *Desktop mesh and robot tooling* |
+| ![Workspace packages](docs/screenshots/gui-packages.png) | ![ROS2 Docker](docs/screenshots/gui-ros2.png) |
+| *Workspace package bundle flow* | *ROS2 distro and Docker bridge controls* |
 
 ---
 

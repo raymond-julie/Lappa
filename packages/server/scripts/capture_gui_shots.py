@@ -41,6 +41,10 @@ def main() -> None:
             app.quit()
             return
         name, page = shots[i]
+        if page == "models":
+            obj = next((p for p in win._all_files if p.endswith(".obj")), None)
+            if obj:
+                win._open_file(obj)
         win._goto(page)
         app.processEvents()
         # let sim run a bit on sim page
