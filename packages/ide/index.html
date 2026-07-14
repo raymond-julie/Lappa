@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lappa IDE</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin:0; font-family:system-ui,sans-serif; background:#0b1220; color:#e2e8f0; }
+    header { padding:1rem 1.25rem; border-bottom:1px solid #1e293b; display:flex; gap:1rem; align-items:center; }
+    header h1 { margin:0; font-size:1.1rem; font-weight:600; }
+    main { display:grid; grid-template-columns:220px 1fr 280px; min-height:calc(100vh - 52px); }
+    aside, section, .panel { border-right:1px solid #1e293b; padding:1rem; }
+    .panel { border-right:none; border-left:1px solid #1e293b; }
+    .muted { color:#94a3b8; font-size:.9rem; }
+    code { background:#111827; padding:.1rem .35rem; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Lappa IDE</h1>
+    <span class="muted">ROS2 package workspace shell</span>
+  </header>
+  <main>
+    <aside>
+      <strong>Packages</strong>
+      <p class="muted">Open a workspace via <code>lappa serve</code>.</p>
+    </aside>
+    <section>
+      <strong>Editor</strong>
+      <p class="muted">Scaffold UI — connect to Lappa server API for file tree and build.</p>
+    </section>
+    <div class="panel">
+      <strong>Sim / build</strong>
+      <p class="muted">Native sim metrics and colcon status appear here.</p>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "name": "zigzag_corridor",
+  "points": [
+    [
+      0,
+      0
+    ],
+    [
+      2,
+      0
+    ],
+    [
+      2,
+      1
+    ],
+    [
+      4,
+      1
+    ]
+  ],
+  "path_length_m": 5.0,
+  "expected_net_displacement_m": 4.1231,
+  "note": "Zigzag: length 5, net ~sqrt(17)"
+}
