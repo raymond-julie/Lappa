@@ -1,7 +1,7 @@
 # Lappa
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![Version](https://img.shields.io/badge/version-0.4.27-0E8A16.svg)](packages/server/pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.4.28-0E8A16.svg)](packages/server/pyproject.toml)
 [![GUI-PySide6](https://img.shields.io/badge/GUI-PySide6-41CD52.svg)](packages/server/src/lappa/gui/)
 [![ROS2](https://img.shields.io/badge/ROS2-Humble%20%7C%20Jazzy%20%7C%20Rolling-22314E.svg)](https://docs.ros.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -159,7 +159,7 @@ lappa serve --port 8840   # optional local FastAPI automation API
 
 | Command | Description |
 | --- | --- |
-| `lappa version` | Package version (**0.4.27**) |
+| `lappa version` | Package version (**0.4.28**) |
 | `lappa demo` | Offline smoke: engines + 3D robot + bundle + trajectory |
 | `lappa gui` / **`lappa-gui`** | **Qt desktop app** (needs `.[gui]`) |
 | `lappa demos list` | List robot demos |

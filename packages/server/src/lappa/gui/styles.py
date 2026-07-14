@@ -40,6 +40,12 @@ QLabel#panelTitle {
   font-weight: 800;
 }
 
+QLabel#panelTitleSmall {
+  color: #f8fafc;
+  font-size: 15px;
+  font-weight: 800;
+}
+
 QLabel#pathLabel {
   color: #7dd3fc;
   font-family: "Cascadia Mono", "Consolas", monospace;
@@ -58,6 +64,24 @@ QLabel#statePill {
 QFrame#projectPanel, QFrame#editorPanel, QFrame#simPanel {
   background: #0b1020;
   border-right: 1px solid #1e293b;
+}
+
+QFrame#activityRail {
+  background: #080d18;
+  border-right: 1px solid #1e293b;
+}
+
+QFrame#explorerPanel {
+  background: #0b1020;
+}
+
+QFrame#editorHeader {
+  background: #0b1020;
+  border-bottom: 1px solid #1e293b;
+}
+
+QFrame#editorBody {
+  background: #0b1020;
 }
 
 QFrame#simPanel {
@@ -106,7 +130,21 @@ QPushButton[compact="true"] {
   padding: 6px 9px;
 }
 
-QLineEdit, QComboBox, QTextEdit, QListWidget, QPlainTextEdit {
+QToolButton {
+  background: transparent;
+  color: #94a3b8;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-weight: 800;
+}
+
+QToolButton:hover {
+  background: #111827;
+  color: #e5edf7;
+  border-color: #263449;
+}
+
+QLineEdit, QComboBox, QTextEdit, QListWidget, QTreeWidget, QPlainTextEdit {
   background: #0f172a;
   border: 1px solid #263449;
   border-radius: 7px;
@@ -114,7 +152,7 @@ QLineEdit, QComboBox, QTextEdit, QListWidget, QPlainTextEdit {
   selection-background-color: #2563eb;
 }
 
-QLineEdit:focus, QComboBox:focus, QTextEdit:focus, QListWidget:focus, QPlainTextEdit:focus {
+QLineEdit:focus, QComboBox:focus, QTextEdit:focus, QListWidget:focus, QTreeWidget:focus, QPlainTextEdit:focus {
   border-color: #38bdf8;
 }
 
@@ -133,13 +171,24 @@ QTextEdit#logBox {
   font-family: "Cascadia Mono", "Consolas", monospace;
 }
 
-QListWidget::item {
+QTextEdit#aiChat {
+  background: #080d18;
+  color: #d7e5f5;
+  font-family: "Segoe UI", "Inter", sans-serif;
+  line-height: 1.4;
+}
+
+QListWidget::item, QTreeWidget::item {
   min-height: 24px;
   padding: 6px;
   border-radius: 5px;
 }
 
-QListWidget::item:selected {
+QTreeWidget#fileTree {
+  padding: 4px;
+}
+
+QListWidget::item:selected, QTreeWidget::item:selected {
   background: #1e3a8a;
   color: #ffffff;
 }
@@ -169,6 +218,13 @@ QTabBar::tab:selected {
 
 QSplitter::handle {
   background: #1e293b;
+}
+
+QSplitter#centerSplitter::handle:vertical {
+  height: 7px;
+  background: #172033;
+  border-top: 1px solid #263449;
+  border-bottom: 1px solid #263449;
 }
 
 QStatusBar {

@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, Qt, QTimer
+from PySide6.QtCore import QPointF, QSize, Qt, QTimer
 from PySide6.QtGui import QBrush, QColor, QFont, QFontDatabase, QPainter, QPen
 from PySide6.QtWidgets import (
     QComboBox,
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -27,6 +28,9 @@ from PySide6.QtWidgets import (
     QStatusBar,
     QTabWidget,
     QTextEdit,
+    QToolButton,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -43,6 +47,16 @@ def _button(text: str, *, primary: bool = False, compact: bool = False) -> QPush
     b.setCursor(Qt.CursorShape.PointingHandCursor)
     b.setProperty("primary", primary)
     b.setProperty("compact", compact)
+    return b
+
+
+def _tool_button(text: str, tooltip: str = "") -> QToolButton:
+    b = QToolButton()
+    b.setText(text)
+    b.setToolTip(tooltip or text)
+    b.setCursor(Qt.CursorShape.PointingHandCursor)
+    b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+    b.setFixedSize(QSize(46, 42))
     return b
 
 
@@ -232,6 +246,8 @@ class MainWindow(QMainWindow):
         self._editor_pkg: RosPackage | None = None
         self._editor_rel: str | None = None
         self._all_files: list[str] = []
+        self._all_dirs: list[str] = []
+        self._ai_turns: list[tuple[str, str]] = []
         self._sim_running = False
         self.setAcceptDrops(True)
 
@@ -320,100 +336,147 @@ class MainWindow(QMainWindow):
     def _build_project_panel(self) -> QFrame:
         panel = QFrame()
         panel.setObjectName("projectPanel")
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(10)
+        outer = QHBoxLayout(panel)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
-        layout.addWidget(_section("Workspace"))
-        self.workspace_roots_list = QListWidget()
-        self.workspace_roots_list.setObjectName("rootList")
-        self.workspace_roots_list.setMaximumHeight(82)
-        layout.addWidget(self.workspace_roots_list)
+        rail = QFrame()
+        rail.setObjectName("activityRail")
+        rail_layout = QVBoxLayout(rail)
+        rail_layout.setContentsMargins(6, 10, 6, 10)
+        rail_layout.setSpacing(8)
+        b_files = _tool_button("Files", "Focus file explorer")
+        b_files.clicked.connect(lambda: self.ed_file_tree.setFocus())
+        b_run = _tool_button("Run", "Run active package simulation")
+        b_run.clicked.connect(self.sim_run)
+        b_ai = _tool_button("AI", "Open AI chat panel")
+        b_ai.clicked.connect(self._focus_ai_panel)
+        for button in (b_files, b_run, b_ai):
+            rail_layout.addWidget(button)
+        rail_layout.addStretch(1)
+        outer.addWidget(rail)
 
-        ws_row = QHBoxLayout()
-        b_add_folder = _button("Add Folder", compact=True)
-        b_add_folder.clicked.connect(self._add_workspace_folder)
-        b_add_pkg = _button("Add Package", compact=True)
-        b_add_pkg.clicked.connect(self._add_workspace_package)
-        ws_row.addWidget(b_add_folder)
-        ws_row.addWidget(b_add_pkg)
-        layout.addLayout(ws_row)
+        explorer = QFrame()
+        explorer.setObjectName("explorerPanel")
+        layout = QVBoxLayout(explorer)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
 
-        ws_row2 = QHBoxLayout()
-        b_new = _button("New", compact=True)
-        b_new.clicked.connect(self._new_workspace)
+        title_row = QHBoxLayout()
+        title = QLabel("Explorer")
+        title.setObjectName("panelTitleSmall")
+        title_row.addWidget(title)
+        title_row.addStretch(1)
+        b_open = _button("Open Folder", compact=True)
+        b_open.clicked.connect(self._add_workspace_folder)
+        title_row.addWidget(b_open)
+        layout.addLayout(title_row)
+
+        action_row = QHBoxLayout()
+        b_pkg = _button("Package", compact=True)
+        b_pkg.clicked.connect(self._add_workspace_package)
+        b_new_file = _button("New File", compact=True)
+        b_new_file.clicked.connect(self._create_new_file)
+        b_new_dir = _button("New Folder", compact=True)
+        b_new_dir.clicked.connect(self._create_new_folder)
         b_refresh = _button("Refresh", primary=True, compact=True)
         b_refresh.clicked.connect(lambda: self._reload_workspace_packages())
-        ws_row2.addWidget(b_new)
-        ws_row2.addWidget(b_refresh)
-        layout.addLayout(ws_row2)
+        for button in (b_pkg, b_new_file, b_new_dir, b_refresh):
+            action_row.addWidget(button)
+        layout.addLayout(action_row)
 
-        layout.addWidget(_section("Package Explorer"))
         self.pkg_meta = QLabel("-")
         self.pkg_meta.setObjectName("muted")
         self.pkg_meta.setWordWrap(True)
         layout.addWidget(self.pkg_meta)
 
         self.file_filter = QLineEdit()
-        self.file_filter.setPlaceholderText("Filter files")
+        self.file_filter.setPlaceholderText("Search files")
         layout.addWidget(self.file_filter)
 
-        self.ed_file_list = QListWidget()
-        self.ed_file_list.itemClicked.connect(self._editor_open_file)
-        layout.addWidget(self.ed_file_list, 1)
+        self.ed_file_tree = QTreeWidget()
+        self.ed_file_tree.setObjectName("fileTree")
+        self.ed_file_tree.setHeaderHidden(True)
+        self.ed_file_tree.itemClicked.connect(self._editor_open_file)
+        self.ed_file_tree.itemActivated.connect(self._editor_open_file)
+        layout.addWidget(self.ed_file_tree, 1)
 
-        demo_row = QHBoxLayout()
-        b_open = _button("Open", compact=True)
-        b_open.clicked.connect(self._open_selected_package)
-        b_run = _button("Run", primary=True, compact=True)
-        b_run.clicked.connect(self._run_selected_package)
-        demo_row.addWidget(b_open)
-        demo_row.addWidget(b_run)
-        layout.addLayout(demo_row)
+        layout.addWidget(_section("Workspace Roots"))
+        self.workspace_roots_list = QListWidget()
+        self.workspace_roots_list.setObjectName("rootList")
+        self.workspace_roots_list.setMaximumHeight(58)
+        layout.addWidget(self.workspace_roots_list)
 
-        layout.addWidget(_section("Packages"))
+        package_row = QHBoxLayout()
+        package_row.addWidget(_section("Packages"))
+        package_row.addStretch(1)
+        b_new_workspace = _button("New Workspace", compact=True)
+        b_new_workspace.clicked.connect(self._new_workspace)
+        package_row.addWidget(b_new_workspace)
+        layout.addLayout(package_row)
+
         self.demo_list = QListWidget()
-        self.demo_list.setMaximumHeight(150)
+        self.demo_list.setMaximumHeight(96)
         for pkg in self.packages:
             item = QListWidgetItem(self._package_label(pkg))
             item.setData(Qt.ItemDataRole.UserRole, self._package_key(pkg))
             self.demo_list.addItem(item)
         self.demo_list.itemDoubleClicked.connect(lambda _: self._open_selected_package())
         layout.addWidget(self.demo_list)
+        outer.addWidget(explorer, 1)
         return panel
 
     def _build_editor_panel(self) -> QFrame:
         panel = QFrame()
         panel.setObjectName("editorPanel")
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(14, 14, 10, 14)
-        layout.setSpacing(10)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        header = QHBoxLayout()
+        header_frame = QFrame()
+        header_frame.setObjectName("editorHeader")
+        header = QHBoxLayout(header_frame)
+        header.setContentsMargins(12, 10, 12, 8)
+        header.setSpacing(10)
         title = QLabel("Source Editor")
         title.setObjectName("panelTitle")
         self.ed_path_label = QLabel("No file open")
         self.ed_path_label.setObjectName("pathLabel")
         header.addWidget(title)
         header.addWidget(self.ed_path_label, 1)
-        layout.addLayout(header)
+        layout.addWidget(header_frame)
+
+        center_splitter = QSplitter(Qt.Orientation.Vertical)
+        center_splitter.setObjectName("centerSplitter")
+        center_splitter.setChildrenCollapsible(False)
+
+        editor_body = QFrame()
+        editor_body.setObjectName("editorBody")
+        editor_layout = QVBoxLayout(editor_body)
+        editor_layout.setContentsMargins(12, 0, 10, 10)
+        editor_layout.setSpacing(0)
 
         self.ed_text = QPlainTextEdit()
         self.ed_text.setObjectName("codeEditor")
         mono = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
         mono.setPointSize(11)
         self.ed_text.setFont(mono)
-        layout.addWidget(self.ed_text, 3)
+        editor_layout.addWidget(self.ed_text, 1)
+        center_splitter.addWidget(editor_body)
 
         self.ops_tabs = QTabWidget()
         self.ops_tabs.setObjectName("opsTabs")
-        self.ops_tabs.setMaximumHeight(230)
+        self.ops_tabs.addTab(self._tab_ai(), "AI Chat")
+        self.ops_tabs.addTab(self._tab_console(), "Console")
         self.ops_tabs.addTab(self._tab_workspace(), "Workspace")
         self.ops_tabs.addTab(self._tab_models(), "3D Models")
         self.ops_tabs.addTab(self._tab_packages(), "Packages")
         self.ops_tabs.addTab(self._tab_ros2(), "ROS2 / Docker")
-        self.ops_tabs.addTab(self._tab_console(), "Console")
-        layout.addWidget(self.ops_tabs, 1)
+        center_splitter.addWidget(self.ops_tabs)
+        center_splitter.setSizes([580, 230])
+        center_splitter.setStretchFactor(0, 4)
+        center_splitter.setStretchFactor(1, 1)
+        layout.addWidget(center_splitter, 1)
         return panel
 
     def _build_sim_panel(self) -> QFrame:
@@ -491,6 +554,33 @@ class MainWindow(QMainWindow):
         self.sim_log.setMaximumHeight(110)
         layout.addWidget(self.sim_log)
         return panel
+
+    def _tab_ai(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
+
+        self.ai_log = QTextEdit()
+        self.ai_log.setObjectName("aiChat")
+        self.ai_log.setReadOnly(True)
+        self.ai_log.setPlaceholderText("AI assistant conversation")
+        self.ai_log.setPlainText(
+            "Lappa AI ready.\n"
+            "Ask about the active ROS package, current file, launch setup, or simulation behavior."
+        )
+        layout.addWidget(self.ai_log, 1)
+
+        input_row = QHBoxLayout()
+        self.ai_input = QLineEdit()
+        self.ai_input.setPlaceholderText("Ask AI about this package or file")
+        self.ai_input.returnPressed.connect(self._ai_send)
+        b_send = _button("Send", primary=True, compact=True)
+        b_send.clicked.connect(self._ai_send)
+        input_row.addWidget(self.ai_input, 1)
+        input_row.addWidget(b_send)
+        layout.addLayout(input_row)
+        return tab
 
     def _tab_workspace(self) -> QWidget:
         tab = QWidget()
@@ -630,6 +720,31 @@ class MainWindow(QMainWindow):
         if hasattr(self, "workspace_log"):
             self.workspace_log.append(msg)
 
+    def _focus_ai_panel(self) -> None:
+        if hasattr(self, "ops_tabs"):
+            self.ops_tabs.setCurrentIndex(0)
+        if hasattr(self, "ai_input"):
+            self.ai_input.setFocus()
+
+    def _ai_send(self) -> None:
+        if not hasattr(self, "ai_input") or not hasattr(self, "ai_log"):
+            return
+        prompt = self.ai_input.text().strip()
+        if not prompt:
+            return
+        self.ai_input.clear()
+        pkg = self._active_package()
+        file_label = self._editor_rel or "no file open"
+        package_label = pkg.name if pkg else "no package"
+        self.ai_log.append(f"\nYou: {prompt}")
+        self.ai_log.append(
+            "Lappa AI: I have the IDE context now: "
+            f"package={package_label}, file={file_label}. "
+            "The chat panel is wired for the desktop workflow; connect the model backend here "
+            "to turn this into code edits, ROS launch checks, and simulation guidance."
+        )
+        self._focus_ai_panel()
+
     def _package_key(self, pkg: RosPackage) -> str:
         return str(pkg.path.resolve())
 
@@ -720,11 +835,12 @@ class MainWindow(QMainWindow):
         elif not self.packages:
             self._editor_pkg = None
             self._all_files = []
+            self._all_dirs = []
             self._editor_rel = None
             if hasattr(self, "pkg_meta"):
                 self.pkg_meta.setText("No package loaded")
-            if hasattr(self, "ed_file_list"):
-                self.ed_file_list.clear()
+            if hasattr(self, "ed_file_tree"):
+                self.ed_file_tree.clear()
             if hasattr(self, "ed_text"):
                 self.ed_text.clear()
 
@@ -793,6 +909,67 @@ class MainWindow(QMainWindow):
             self._reload_workspace_packages()
             self._status(f"Workspace updated from dropped folder(s): {added}")
 
+    def _clean_rel_path(self, raw: str) -> str:
+        rel = raw.replace("\\", "/").strip().lstrip("/")
+        while "//" in rel:
+            rel = rel.replace("//", "/")
+        if not rel or rel in {".", ".."} or rel.endswith("/"):
+            raise ValueError("Enter a relative file or folder path.")
+        root = self._editor_pkg.path.resolve() if self._editor_pkg else None
+        if root:
+            target = (root / rel).resolve()
+            target.relative_to(root)
+        return rel
+
+    def _create_new_file(self) -> None:
+        if not self._editor_pkg:
+            QMessageBox.information(self, "New File", "Open a package first.")
+            return
+        rel, ok = QInputDialog.getText(
+            self,
+            "New File",
+            "Relative path:",
+            text="src/new_node.py",
+        )
+        if not ok:
+            return
+        try:
+            clean = self._clean_rel_path(rel)
+            target = (self._editor_pkg.path / clean).resolve()
+            if target.exists():
+                QMessageBox.warning(self, "New File", "File already exists.")
+                return
+            write_file(self._editor_pkg, clean, "")
+            self._editor_load_package(self._editor_pkg.path)
+            self._open_file(clean)
+            self._status(f"Created file {clean}")
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "New File", str(exc))
+
+    def _create_new_folder(self) -> None:
+        if not self._editor_pkg:
+            QMessageBox.information(self, "New Folder", "Open a package first.")
+            return
+        rel, ok = QInputDialog.getText(
+            self,
+            "New Folder",
+            "Relative path:",
+            text="src/new_folder",
+        )
+        if not ok:
+            return
+        try:
+            clean = self._clean_rel_path(rel.rstrip("/"))
+            root = self._editor_pkg.path.resolve()
+            target = (root / clean).resolve()
+            target.relative_to(root)
+            target.mkdir(parents=True, exist_ok=True)
+            self._all_dirs = self._scan_package_dirs()
+            self._refresh_file_list()
+            self._status(f"Created folder {clean}")
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "New Folder", str(exc))
+
     def _editor_load_current_package(self, *_args) -> None:
         pkg = self._combo_package(self.pkg_combo)
         if pkg:
@@ -811,6 +988,7 @@ class MainWindow(QMainWindow):
         self._editor_pkg = load_package(pkg.path)
         self._editor_rel = None
         self._all_files = list(self._editor_pkg.files)
+        self._all_dirs = self._scan_package_dirs()
         self.pkg_meta.setText(
             f"{self._editor_pkg.name}\n{len(self._all_files)} files\n{self._editor_pkg.path}"
         )
@@ -838,21 +1016,81 @@ class MainWindow(QMainWindow):
             self._open_file(prefer)
         self._status(f"Opened package {self._editor_pkg.name}")
 
+    def _scan_package_dirs(self) -> list[str]:
+        if not self._editor_pkg:
+            return []
+        root = self._editor_pkg.path.resolve()
+        skip = {"__pycache__", "build", "install", "log"}
+        dirs: list[str] = []
+        for path in sorted(root.rglob("*")):
+            if not path.is_dir():
+                continue
+            rel = path.relative_to(root).as_posix()
+            parts = rel.split("/")
+            if any(part.startswith(".") or part in skip for part in parts):
+                continue
+            dirs.append(rel)
+        return dirs
+
     def _refresh_file_list(self) -> None:
         query = self.file_filter.text().strip().lower() if hasattr(self, "file_filter") else ""
         current = self._editor_rel
-        self.ed_file_list.clear()
+        if not hasattr(self, "ed_file_tree"):
+            return
+        self.ed_file_tree.clear()
+        nodes: dict[str, QTreeWidgetItem] = {}
+
+        def ensure_node(path_key: str, *, file_rel: str | None = None) -> QTreeWidgetItem:
+            parts = path_key.split("/")
+            parent: QTreeWidgetItem | None = None
+            built: list[str] = []
+            item: QTreeWidgetItem | None = None
+            for index, part in enumerate(parts):
+                built.append(part)
+                key = "/".join(built)
+                item = nodes.get(key)
+                if item is None:
+                    item = QTreeWidgetItem([part])
+                    item.setData(0, Qt.ItemDataRole.UserRole, None)
+                    if parent:
+                        parent.addChild(item)
+                    else:
+                        self.ed_file_tree.addTopLevelItem(item)
+                    nodes[key] = item
+                parent = item
+                if index < len(parts) - 1:
+                    item.setExpanded(True)
+            if item is None:
+                item = QTreeWidgetItem([path_key])
+                self.ed_file_tree.addTopLevelItem(item)
+            if file_rel:
+                item.setData(0, Qt.ItemDataRole.UserRole, file_rel)
+            return item
+
+        for rel in self._all_dirs:
+            if query and query not in rel.lower():
+                continue
+            ensure_node(rel)
+
+        current_item: QTreeWidgetItem | None = None
         for rel in self._all_files:
             if query and query not in rel.lower():
                 continue
-            item = QListWidgetItem(rel)
-            self.ed_file_list.addItem(item)
+            item = ensure_node(rel, file_rel=rel)
             if current and rel == current:
-                self.ed_file_list.setCurrentItem(item)
+                current_item = item
 
-    def _editor_open_file(self, item: QListWidgetItem) -> None:
-        if item:
-            self._open_file(item.text())
+        if current_item:
+            self.ed_file_tree.setCurrentItem(current_item)
+            self.ed_file_tree.scrollToItem(current_item)
+        self.ed_file_tree.expandToDepth(0)
+
+    def _editor_open_file(self, item: QTreeWidgetItem) -> None:
+        if not item:
+            return
+        rel = item.data(0, Qt.ItemDataRole.UserRole)
+        if rel:
+            self._open_file(str(rel))
 
     def _open_file(self, rel: str) -> None:
         if not self._editor_pkg:
@@ -1073,12 +1311,14 @@ class MainWindow(QMainWindow):
     def _goto(self, key: str) -> None:
         """Compatibility hook for screenshot automation."""
         mapping = {
-            "workspace": 0,
-            "demos": 0,
-            "models": 1,
-            "packages": 2,
-            "ros2": 3,
-            "docker": 3,
+            "ai": 0,
+            "console": 1,
+            "workspace": 2,
+            "demos": 2,
+            "models": 3,
+            "packages": 4,
+            "ros2": 5,
+            "docker": 5,
         }
         if key in mapping:
             self.ops_tabs.setCurrentIndex(mapping[key])
