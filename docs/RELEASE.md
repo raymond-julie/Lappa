@@ -7,7 +7,7 @@ Produce standalone binaries:
 | `lappa-windows-x64.exe` | Windows 10/11 x64 |
 | `lappa-linux-x64` | Linux x64 |
 
-Stack: **PyInstaller onefile** + FastAPI/uvicorn IDE server. Double-click / run with no args opens the browser on `http://127.0.0.1:8840`.
+Stack: **PyInstaller onefile** + PySide6 Qt desktop IDE. Double-click / run with no args opens the desktop package editor.
 
 ## Local build
 
@@ -65,9 +65,9 @@ Override with env `LAPPA_HOME=/path/to/data`.
 ## CLI (same binary)
 
 ```text
-lappa.exe                 # desktop: serve + browser
+lappa.exe                 # desktop Qt IDE
 lappa.exe desktop
-lappa.exe serve --port 8840
+lappa.exe serve --port 8840   # optional automation API
 lappa.exe demo
 lappa.exe ros2 list
 lappa.exe package bundle -p diff_drive_2w

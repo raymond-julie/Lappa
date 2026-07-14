@@ -10,13 +10,10 @@ block_cipher = None
 SPECDIR = Path(SPECPATH)
 SERVER = SPECDIR
 PACKAGES = SERVER.parent
-IDE = PACKAGES / "ide"
 DEMOS = PACKAGES / "demos"
 DOCKER = PACKAGES / "docker"
 
 datas = []
-if IDE.is_dir():
-    datas.append((str(IDE), "ide"))
 if DEMOS.is_dir():
     datas.append((str(DEMOS), "demos"))
 if DOCKER.is_dir():

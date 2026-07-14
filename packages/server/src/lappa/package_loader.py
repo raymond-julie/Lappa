@@ -85,8 +85,11 @@ def list_demo_packages(demos_root: Path) -> list[RosPackage]:
 
 
 def read_file(package: RosPackage, rel: str) -> str:
-    target = (package.path / rel).resolve()
-    if not str(target).startswith(str(package.path.resolve())):
+    root = package.path.resolve()
+    target = (root / rel).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError:
         raise ValueError("path escapes package root")
     if not target.is_file():
         raise FileNotFoundError(rel)
@@ -94,8 +97,11 @@ def read_file(package: RosPackage, rel: str) -> str:
 
 
 def write_file(package: RosPackage, rel: str, content: str) -> None:
-    target = (package.path / rel).resolve()
-    if not str(target).startswith(str(package.path.resolve())):
+    root = package.path.resolve()
+    target = (root / rel).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError:
         raise ValueError("path escapes package root")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding="utf-8")

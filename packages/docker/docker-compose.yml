@@ -1,8 +1,8 @@
 # Image tag follows selected ROS2 distro (Dockerfile rewritten by Lappa).
 # Default: humble. Switch via IDE title bar or `lappa ros2 set jazzy`.
 #
-# Bridge: packages/demos is bind-mounted at /ws/src so the Lappa IDE
-# (Monaco web or Qt Editor) can open/edit package sources and Docker
+# Bridge: packages/demos is bind-mounted at /ws/src so the Lappa Qt IDE
+# can open/edit package sources and Docker
 # `ros2 launch` sees the same files without rebuild.
 services:
   lappa-ros2:

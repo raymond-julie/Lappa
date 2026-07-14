@@ -2,7 +2,7 @@
 
 ## v0.1 (shipped)
 
-- Professional web IDE shell (Monaco, explorer, sim, console)
+- Qt desktop package IDE (editor, sim, demos, Docker controls)
 - Native kinematics sim (2w / 3w omni / tricycle / ackermann / arm)
 - Demo ROS2-style packages
 - Hot-reload file watch
@@ -22,7 +22,7 @@
 - [x] `build_aligned_robot` — multi-link chassis + wheels + lidar with kinematic offsets
 - [x] Continuous wheel joints + sim joint odometry for spin
 - [x] `scene3d` API + package mesh serving
-- [x] IDE WebGL 3D viewer (Three.js), 2D/3D toggle, orbit camera
+- [x] 3D robot build workflow for package URDF/OBJ assets
 
 ## v0.4
 
@@ -35,7 +35,7 @@
 ## Later
 
 - Gazebo / Ignition show mode via Docker
-- RViz2 web bridge (Foxglove / rosbridge)
+- RViz2/Foxglove bridge
 - Colcon build inside container with cache
-- Electron / Tauri desktop shell
+- Native installer packaging
 - Multi-robot fleets

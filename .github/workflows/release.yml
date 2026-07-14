@@ -99,7 +99,7 @@ jobs:
             | `lappa-linux-x64` | Linux x64 (glibc) |
 
             ### Run
-            **Windows:** double-click or `.\lappa-windows-x64.exe` (opens IDE in browser on http://127.0.0.1:8840)
+            **Windows:** double-click or `.\lappa-windows-x64.exe` to open the Qt desktop IDE.
 
             **Linux:**
             ```bash

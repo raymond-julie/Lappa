@@ -9,7 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 from lappa import __version__, docker_bridge, models3d, packager, ros2_versions
-from lappa.config import DEMOS_ROOT, IDE_ROOT, ensure_dirs
+from lappa.config import DEMOS_ROOT, ensure_dirs
 from lappa.package_loader import list_demo_packages, load_package
 from lappa.sim.session import SESSION
 
@@ -93,7 +93,7 @@ def demo_cmd() -> None:
     rprint({"trajectory_csv": str(csv_path), "points": SESSION.status()["trajectory_points"]})
     SESSION.stop()
     dstat = docker_bridge.status()
-    rprint({"docker": dstat["available"], "daemon": dstat.get("daemon"), "ide": IDE_ROOT.is_dir()})
+    rprint({"docker": dstat["available"], "daemon": dstat.get("daemon"), "gui": True})
     rprint("Lappa demo complete (sim + ros2 version + package + 3d + trajectory).")
 
 
@@ -390,14 +390,8 @@ def model_scene(package: str = typer.Argument(...)) -> None:
 def serve_cmd(
     host: str = typer.Option("127.0.0.1", "--host"),
     port: int = typer.Option(8840, "--port"),
-    open_browser: bool = typer.Option(False, "--open/--no-open", help="Open system browser"),
 ) -> None:
-    """Serve IDE + API."""
-    if open_browser:
-        from lappa.desktop import run_desktop
-
-        run_desktop(host=host, port=port, open_browser=True)
-        return
+    """Serve the local automation API only. The IDE is the Qt desktop app."""
     ensure_dirs()
     try:
         import uvicorn
@@ -405,20 +399,16 @@ def serve_cmd(
         raise SystemExit('Install API extras: pip install -e ".[api]"') from exc
     from lappa.api import app as fastapi_app
 
-    rprint(f"Lappa IDE → http://{host}:{port}")
+    rprint(f"Lappa API -> http://{host}:{port}")
     uvicorn.run(fastapi_app, host=host, port=port, log_level="info")
 
 
 @app.command("desktop")
-def desktop_cmd(
-    host: str = typer.Option("127.0.0.1", "--host"),
-    port: int = typer.Option(8840, "--port"),
-    no_browser: bool = typer.Option(False, "--no-browser"),
-) -> None:
-    """Launch IDE server and open the browser (release builds default here)."""
-    from lappa.desktop import run_desktop
+def desktop_cmd() -> None:
+    """Launch the Qt desktop IDE."""
+    from lappa.gui.app import main as gui_main
 
-    run_desktop(host=host, port=port, open_browser=not no_browser)
+    raise SystemExit(gui_main())
 
 
 if __name__ == "__main__":

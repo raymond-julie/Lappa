@@ -86,7 +86,7 @@ rect.c-bg-rect { fill: var(--bg); }
         <rect x="42" y="217" width="92" height="52" rx="6" class="c-mask"/>
         <rect x="42" y="217" width="92" height="52" rx="6" class="c-frontend" stroke-width="1.5"/>
         <text x="88" y="238" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Edit</text>
-        <text x="88" y="255" class="t-muted" font-size="8" text-anchor="middle">Monaco</text>
+        <text x="88" y="255" class="t-muted" font-size="8" text-anchor="middle">Qt editor</text>
 
         <rect x="254" y="217" width="92" height="52" rx="6" class="c-mask"/>
         <rect x="254" y="217" width="92" height="52" rx="6" class="c-backend" stroke-width="1.5"/>
@@ -105,8 +105,8 @@ rect.c-bg-rect { fill: var(--bg); }
 
         <rect x="454" y="341" width="92" height="52" rx="6" class="c-mask"/>
         <rect x="454" y="341" width="92" height="52" rx="6" class="c-frontend" stroke-width="1.5"/>
-        <text x="500" y="362" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">WebGL</text>
-        <text x="500" y="379" class="t-muted" font-size="8" text-anchor="middle">orbit</text>
+        <text x="500" y="362" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">URDF/OBJ</text>
+        <text x="500" y="379" class="t-muted" font-size="8" text-anchor="middle">assets</text>
 
         <!-- Edge labels -->
 

@@ -1,18 +1,17 @@
 # Lappa
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![Version](https://img.shields.io/badge/version-0.4.21-0E8A16.svg)](packages/server/pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.4.25-0E8A16.svg)](packages/server/pyproject.toml)
 [![GUI-PySide6](https://img.shields.io/badge/GUI-PySide6-41CD52.svg)](packages/server/src/lappa/gui/)
 [![ROS2](https://img.shields.io/badge/ROS2-Humble%20%7C%20Jazzy%20%7C%20Rolling-22314E.svg)](https://docs.ros.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![MergeOS](https://img.shields.io/badge/MergeOS-bounties-5319E7.svg)](https://github.com/mergeos-bounties)
 
-**Lappa** is a **ROS2 package IDE**: **open and edit** package sources (Explorer + Monaco web IDE, or **Qt Editor**), run **offline native simulation**, and optionally **launch the same package in Docker** (`ros2 launch`) so edits mount live into the container — **without installing a full ROS2 desktop on the host**.
+**Lappa** is a **desktop ROS2 package IDE**: **open and edit** package sources in the Qt editor, run **offline native simulation**, and optionally **launch the same package in Docker** (`ros2 launch`) so edits mount live into the container — **without installing a full ROS2 desktop on the host**.
 
 | Surface | Role |
 | --- | --- |
-| **Web IDE** (`lappa serve`) | Primary code editor (Monaco), file tree, sim canvas, Docker launch |
-| **Qt desktop** (`lappa-gui`) | Editor page + Simulation + Docker bridge controls |
+| **Qt desktop IDE** (`lappa-gui`) | Editor page + Simulation + Docker bridge controls |
 | **Native sim** | Offline kinematics when Docker is unavailable |
 | **Docker** | Real ROS2 distro; `packages/demos` → `/ws/src` for IDE↔container bridge |
 
@@ -44,7 +43,7 @@
 
 | Capability | What you get |
 | --- | --- |
-| **Package IDE (open/edit)** | Monaco web Explorer **or** Qt **Editor** — open demo tree, edit, Ctrl+S / Save |
+| **Package IDE (open/edit)** | Qt package editor — open demo tree, edit, Ctrl+S / Save |
 | **IDE ↔ Docker bridge** | `lappa docker launch --demo <pkg>` runs `sim.launch.py` on mounted sources |
 | **Offline native sim** | Diff-drive, omni, tricycle, ackermann, planar arm — pose, twist, lidar, joints |
 | **Lidar obstacles** | Default obstacle map for denser synthetic scans |
@@ -79,21 +78,6 @@ lappa gui
 | **3D models** | Build aligned multi-link robot meshes for a demo package |
 | **Packages** | List / create colcon-ready zip bundles |
 | **ROS2 / Docker** | Distro select, start container, **launch package sim in Docker** |
-
-### Web IDE (Monaco) — code first
-
-```powershell
-cd packages\server
-pip install -e ".[dev]"
-lappa serve --port 8840
-# open http://127.0.0.1:8840 — Explorer opens package files in Monaco
-```
-
-| Action | What happens |
-| --- | --- |
-| Click a demo | Opens package tree + editor + native sim |
-| Edit + Ctrl+S | Writes file under `packages/demos/…` (hot-reload) |
-| Docker → **Launch active package** | `ros2 launch` in container on that package |
 
 <p align="center">
   <img src="docs/screenshots/gui-sim.png" alt="Lappa GUI — Simulation" width="100%" />
@@ -166,7 +150,7 @@ pip install -e ".[dev,api]"
 lappa demos list
 lappa sim start --demo diff_drive_2w
 lappa model build-robot diff_drive_2w
-lappa serve --port 8840   # FastAPI + optional static assets
+lappa serve --port 8840   # optional local FastAPI automation API
 ```
 
 ---
@@ -175,7 +159,7 @@ lappa serve --port 8840   # FastAPI + optional static assets
 
 | Command | Description |
 | --- | --- |
-| `lappa version` | Package version (**0.4.13**) |
+| `lappa version` | Package version (**0.4.25**) |
 | `lappa demo` | Offline smoke: engines + 3D robot + bundle + trajectory |
 | `lappa gui` / **`lappa-gui`** | **Qt desktop app** (needs `.[gui]`) |
 | `lappa demos list` | List robot demos |
@@ -190,8 +174,8 @@ lappa serve --port 8840   # FastAPI + optional static assets
 | `lappa model build-robot` | Full multi-link robot (chassis + wheels + lidar) |
 | `lappa model scene` | Print `scene3d` JSON for a package |
 | `lappa docker status` | Docker availability / distro |
-| `lappa serve` | Optional FastAPI server (automation / legacy assets) |
-| `lappa desktop` | Optional: serve + open system browser |
+| `lappa serve` | Optional local FastAPI automation API |
+| `lappa desktop` | Launch the Qt desktop IDE |
 
 ```powershell
 lappa demos list
@@ -294,7 +278,7 @@ In **Qt → ROS2 / Docker**, pick the distro. Starting Docker regenerates `packa
 
 ## HTTP API (optional)
 
-Base URL when you intentionally run `lappa serve`: `http://127.0.0.1:8840`
+Base URL when you intentionally run the local automation API with `lappa serve`: `http://127.0.0.1:8840`
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -314,7 +298,7 @@ Base URL when you intentionally run `lappa serve`: `http://127.0.0.1:8840`
 | `POST` | `/api/docker/launch/stop` | Stop launch processes |
 | `GET`/`PUT` | `/api/files` | Open / save package files (IDE) |
 
-Prefer **web IDE / Qt Editor** for day-to-day package work; API powers both.
+Prefer the **Qt desktop IDE** for day-to-day package work; the API is for automation.
 
 ---
 
@@ -330,7 +314,7 @@ ros2 launch <package> sim.launch.py
 
 | Step | What happens |
 | --- | --- |
-| 1. IDE edit | `packages/demos/<pkg>/…` (Monaco / Qt Editor) |
+| 1. IDE edit | `packages/demos/<pkg>/…` (Qt Editor) |
 | 2. `lappa docker start` | Image: `/opt/ros/$DISTRO` + colcon + rclpy/launch; mount demos → `/ws/src` |
 | 3. `lappa docker launch -d <pkg>` | `colcon build --packages-select <pkg>` → `source install` → **`ros2 launch <pkg> sim.launch.py`** |
 | 4. Topics | Real ROS2 nodes: `/cmd_vel`, `/odom`, `/scan` (or arm joints) |
@@ -418,7 +402,6 @@ packages/
     tests/
   demos/                  # diff_drive_2w, omni_3w, …
   docker/                 # Optional ROS2 show mode
-  ide/                    # Legacy browser assets (optional / secondary)
 docs/
   screenshots/            # gui-*.png preferred for product shots
   diagrams/
@@ -445,7 +428,7 @@ lappa-gui
 ## MergeOS bounties
 
 Star → claim a bounty issue → PR to **master** → MRG **25–200**.  
-Evidence for UI bounties: **Qt desktop screenshots** (`lappa-gui`), not the legacy browser shell.  
+Evidence for UI bounties: **Qt desktop screenshots** (`lappa-gui`).  
 See [mergeos](https://github.com/mergeos-bounties/mergeos) and [docs/BOUNTY.md](docs/BOUNTY.md).
 
 ---

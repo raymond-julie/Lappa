@@ -48,19 +48,17 @@ def _copy_tree_if_needed(src: Path, dst: Path) -> None:
 
 def ensure_runtime_layout() -> dict[str, Path]:
     """
-    Resolve IDE / demos / docker / workspaces.
+    Resolve demos / docker / workspaces.
 
-    Frozen builds ship ide+demos+docker under _MEIPASS; demos & docker are
+    Frozen builds ship demos+docker under _MEIPASS; demos & docker are
     copied once into a writable lappa_data folder beside the executable.
     """
     bundle = bundle_root()
     home = app_home()
 
     if is_frozen():
-        bundled_ide = bundle / "ide"
         bundled_demos = bundle / "demos"
         bundled_docker = bundle / "docker"
-        ide = bundled_ide if bundled_ide.is_dir() else home / "ide"
         demos = home / "demos"
         docker = home / "docker"
         _copy_tree_if_needed(bundled_demos, demos)
@@ -68,7 +66,6 @@ def ensure_runtime_layout() -> dict[str, Path]:
         workspaces = home / "workspaces"
     else:
         packages = bundle  # packages/
-        ide = packages / "ide"
         demos = packages / "demos"
         docker = packages / "docker"
         workspaces = home / ".workspaces"
@@ -77,7 +74,6 @@ def ensure_runtime_layout() -> dict[str, Path]:
     return {
         "bundle": bundle,
         "home": home,
-        "ide": ide,
         "demos": demos,
         "docker": docker,
         "workspaces": workspaces,

@@ -2,7 +2,7 @@
 
 Native kinematics sim works offline. Docker is the path for real
 ``ros2 launch <pkg> sim.launch.py`` against mounted package sources so
-IDE edits (Explorer/Monaco/Qt Editor) land in the container without
+IDE edits from the Qt package editor land in the container without
 rebuilding the image every time.
 """
 

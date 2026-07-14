@@ -4,27 +4,19 @@ from pathlib import Path
 from typing import Any
 
 from lappa import __version__, docker_bridge, models3d, packager, ros2_versions, urdf
-from lappa.config import DEMOS_ROOT, IDE_ROOT, ensure_dirs
+from lappa.config import DEMOS_ROOT, ensure_dirs
 from lappa.package_loader import list_demo_packages, load_package, read_file, write_file
 from lappa.sim.session import SESSION
 
 try:
     from fastapi import FastAPI, HTTPException
-    from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse
-    from fastapi.staticfiles import StaticFiles
     from pydantic import BaseModel
 except ImportError as exc:  # pragma: no cover
     raise ImportError('pip install -e ".[api]"') from exc
 
 ensure_dirs()
 app = FastAPI(title="Lappa", version=__version__)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # Active workspace package path (default first demo)
 _active: Path | None = None
@@ -433,10 +425,3 @@ def api_package_mesh(package: str, filename: str):
     return PlainTextResponse(path.read_text(encoding="utf-8"), media_type="text/plain")
 
 
-# Static IDE
-if IDE_ROOT.is_dir():
-    app.mount("/assets", StaticFiles(directory=str(IDE_ROOT / "assets")), name="assets")
-
-    @app.get("/")
-    def index() -> FileResponse:
-        return FileResponse(IDE_ROOT / "index.html")
