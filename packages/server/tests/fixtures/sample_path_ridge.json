@@ -1,0 +1,28 @@
+{
+  "name": "ridge_path",
+  "points": [
+    [
+      0,
+      0
+    ],
+    [
+      1,
+      2
+    ],
+    [
+      3,
+      2
+    ],
+    [
+      4,
+      0
+    ],
+    [
+      6,
+      0
+    ]
+  ],
+  "path_length_m": 8.47213595499958,
+  "expected_net_displacement_m": 6.0,
+  "note": "Ridge / up-and-over path"
+}
