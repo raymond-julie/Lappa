@@ -1,0 +1,28 @@
+{
+  "name": "sawtooth_path",
+  "points": [
+    [
+      0,
+      0
+    ],
+    [
+      1,
+      1
+    ],
+    [
+      2,
+      0
+    ],
+    [
+      3,
+      1
+    ],
+    [
+      4,
+      0
+    ]
+  ],
+  "path_length_m": 5.656854249492381,
+  "expected_net_displacement_m": 4.0,
+  "note": "Sawtooth: 4 segments of sqrt(2), net 4"
+}
