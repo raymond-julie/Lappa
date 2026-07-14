@@ -6,7 +6,16 @@ import math
 from pathlib import Path
 
 from PySide6.QtCore import QPointF, QSize, Qt, QTimer
-from PySide6.QtGui import QBrush, QColor, QFont, QFontDatabase, QPainter, QPen
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QFont,
+    QFontDatabase,
+    QIcon,
+    QPainter,
+    QPen,
+    QPixmap,
+)
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -50,22 +59,116 @@ def _button(text: str, *, primary: bool = False, compact: bool = False) -> QPush
     return b
 
 
-def _tool_button(text: str, tooltip: str = "") -> QToolButton:
+def _icon(name: str, color: str = "#c9d1d9", accent: str = "#58a6ff") -> QIcon:
+    pix = QPixmap(24, 24)
+    pix.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pix)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    pen = QPen(QColor(color), 2)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    painter.setPen(pen)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+
+    if name == "explorer":
+        painter.drawRoundedRect(6, 4, 11, 16, 2, 2)
+        painter.drawLine(9, 8, 15, 8)
+        painter.drawLine(9, 12, 15, 12)
+        painter.drawLine(9, 16, 13, 16)
+    elif name == "folder":
+        painter.drawRoundedRect(3, 7, 18, 12, 2, 2)
+        painter.drawLine(4, 7, 9, 7)
+        painter.drawLine(9, 7, 11, 5)
+        painter.drawLine(11, 5, 17, 5)
+    elif name == "file":
+        painter.drawRoundedRect(7, 4, 11, 16, 2, 2)
+        painter.drawLine(14, 4, 18, 8)
+        painter.drawLine(14, 4, 14, 8)
+        painter.drawLine(14, 8, 18, 8)
+    elif name == "file-plus":
+        painter.drawRoundedRect(7, 4, 11, 16, 2, 2)
+        painter.drawLine(12, 11, 12, 17)
+        painter.drawLine(9, 14, 15, 14)
+    elif name == "folder-plus":
+        painter.drawRoundedRect(3, 7, 18, 12, 2, 2)
+        painter.drawLine(5, 7, 10, 7)
+        painter.drawLine(10, 7, 12, 5)
+        painter.drawLine(12, 5, 17, 5)
+        painter.drawLine(12, 10, 12, 16)
+        painter.drawLine(9, 13, 15, 13)
+    elif name == "refresh":
+        painter.drawArc(5, 5, 14, 14, 30 * 16, 285 * 16)
+        painter.drawLine(17, 5, 19, 10)
+        painter.drawLine(17, 5, 12, 6)
+    elif name == "play":
+        painter.setBrush(QColor(accent))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawPolygon([QPointF(8, 5), QPointF(19, 12), QPointF(8, 19)])
+    elif name == "stop":
+        painter.setBrush(QColor("#0b0f17"))
+        painter.setPen(QPen(QColor(color), 2))
+        painter.drawRoundedRect(7, 7, 10, 10, 2, 2)
+    elif name == "save":
+        painter.drawRoundedRect(5, 4, 14, 16, 2, 2)
+        painter.drawRect(8, 4, 7, 5)
+        painter.drawLine(8, 16, 16, 16)
+    elif name == "ai":
+        painter.setPen(QPen(QColor(accent), 2))
+        painter.drawEllipse(5, 5, 14, 14)
+        painter.drawLine(12, 3, 12, 6)
+        painter.drawLine(12, 18, 12, 21)
+        painter.drawLine(3, 12, 6, 12)
+        painter.drawLine(18, 12, 21, 12)
+        painter.drawPoint(10, 11)
+        painter.drawPoint(14, 11)
+    elif name == "cube":
+        painter.drawPolygon([QPointF(12, 4), QPointF(20, 8), QPointF(12, 12), QPointF(4, 8)])
+        painter.drawLine(4, 8, 4, 16)
+        painter.drawLine(20, 8, 20, 16)
+        painter.drawLine(12, 12, 12, 21)
+        painter.drawLine(4, 16, 12, 21)
+        painter.drawLine(20, 16, 12, 21)
+    elif name == "docker":
+        painter.drawRoundedRect(4, 8, 16, 10, 2, 2)
+        painter.drawRect(7, 5, 4, 3)
+        painter.drawRect(12, 5, 4, 3)
+        painter.drawLine(6, 18, 18, 18)
+    elif name == "reset":
+        painter.drawArc(5, 5, 14, 14, 70 * 16, 250 * 16)
+        painter.drawLine(6, 8, 6, 3)
+        painter.drawLine(6, 8, 11, 8)
+    else:
+        painter.drawEllipse(7, 7, 10, 10)
+
+    painter.end()
+    return QIcon(pix)
+
+
+def _tool_button(
+    icon: str,
+    tooltip: str = "",
+) -> QToolButton:
     b = QToolButton()
-    b.setText(text)
-    b.setToolTip(tooltip or text)
+    b.setIcon(_icon(icon))
+    b.setIconSize(QSize(18, 18))
+    b.setToolTip(tooltip)
     b.setCursor(Qt.CursorShape.PointingHandCursor)
-    b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+    b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
     b.setFixedSize(QSize(42, 34))
     return b
 
 
-def _toolbar_button(text: str, tooltip: str = "", width: int = 34) -> QToolButton:
+def _toolbar_button(
+    icon: str,
+    tooltip: str = "",
+    width: int = 30,
+) -> QToolButton:
     b = QToolButton()
-    b.setText(text)
-    b.setToolTip(tooltip or text)
+    b.setIcon(_icon(icon))
+    b.setIconSize(QSize(17, 17))
+    b.setToolTip(tooltip)
     b.setCursor(Qt.CursorShape.PointingHandCursor)
-    b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+    b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
     b.setFixedSize(QSize(width, 28))
     return b
 
@@ -97,6 +200,9 @@ class SimCanvas(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.setMinimumSize(360, 300)
+        self.setAutoFillBackground(False)
+        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self.state: dict = {
             "x": 0.0,
             "y": 0.0,
@@ -246,6 +352,148 @@ class SimCanvas(QWidget):
             painter.drawEllipse(QPointF(px, py), 6, 6)
 
 
+class ModelPreview(QWidget):
+    """Lightweight 3D/wireframe preview for mesh-like files."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setMinimumSize(280, 220)
+        self.setAutoFillBackground(False)
+        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
+        self.vertices: list[tuple[float, float, float]] = []
+        self.edges: list[tuple[int, int]] = []
+        self.summary = "No 3D file"
+
+    def load_text(self, rel: str, text: str) -> None:
+        suffix = Path(rel).suffix.lower()
+        if suffix == ".obj":
+            self._load_obj(text)
+        elif suffix == ".stl":
+            self._load_stl(text)
+        elif suffix == ".dae":
+            self._load_dae(text)
+        elif suffix in {".urdf", ".xml"}:
+            self._load_urdf(text)
+        else:
+            self.vertices = []
+            self.edges = []
+            self.summary = f"{suffix or 'file'} preview"
+        self.update()
+
+    def _load_obj(self, text: str) -> None:
+        vertices: list[tuple[float, float, float]] = []
+        edges: set[tuple[int, int]] = set()
+        for line in text.splitlines():
+            parts = line.strip().split()
+            if not parts:
+                continue
+            if parts[0] == "v" and len(parts) >= 4:
+                try:
+                    vertices.append((float(parts[1]), float(parts[2]), float(parts[3])))
+                except ValueError:
+                    continue
+            elif parts[0] == "f" and len(parts) >= 3:
+                face: list[int] = []
+                for raw in parts[1:]:
+                    try:
+                        idx = int(raw.split("/")[0])
+                    except ValueError:
+                        continue
+                    if idx < 0:
+                        idx = len(vertices) + idx + 1
+                    face.append(idx - 1)
+                for a, b in zip(face, face[1:] + face[:1]):
+                    if a >= 0 and b >= 0:
+                        edges.add(tuple(sorted((a, b))))
+        self.vertices = vertices[:3000]
+        self.edges = [(a, b) for a, b in edges if a < len(self.vertices) and b < len(self.vertices)]
+        self.summary = f"OBJ  {len(vertices)} vertices  {len(edges)} edges"
+
+    def _load_stl(self, text: str) -> None:
+        vertices: list[tuple[float, float, float]] = []
+        edges: set[tuple[int, int]] = set()
+        face: list[int] = []
+        for line in text.splitlines():
+            parts = line.strip().split()
+            if len(parts) == 4 and parts[0].lower() == "vertex":
+                try:
+                    vertices.append((float(parts[1]), float(parts[2]), float(parts[3])))
+                    face.append(len(vertices) - 1)
+                    if len(face) == 3:
+                        for a, b in zip(face, face[1:] + face[:1]):
+                            edges.add(tuple(sorted((a, b))))
+                        face = []
+                except ValueError:
+                    continue
+        self.vertices = vertices[:3000]
+        self.edges = [(a, b) for a, b in edges if a < len(self.vertices) and b < len(self.vertices)]
+        self.summary = f"STL  {len(vertices)} vertices  {len(edges)} edges"
+
+    def _load_urdf(self, text: str) -> None:
+        import re
+
+        meshes = re.findall(r'filename=["\']([^"\']+)["\']', text)
+        joints = re.findall(r"<joint\b", text)
+        links = re.findall(r"<link\b", text)
+        self.vertices = []
+        self.edges = []
+        self.summary = f"URDF  {len(links)} links  {len(joints)} joints  {len(meshes)} mesh refs"
+
+    def _load_dae(self, text: str) -> None:
+        import re
+
+        geometries = re.findall(r"<geometry\b", text)
+        sources = re.findall(r"<source\b", text)
+        triangles = re.findall(r"<triangles\b", text)
+        self.vertices = []
+        self.edges = []
+        self.summary = (
+            f"DAE  {len(geometries)} geometries  {len(sources)} sources  "
+            f"{len(triangles)} triangle sets"
+        )
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        w, h = self.width(), self.height()
+        painter.fillRect(0, 0, w, h, QColor("#080d18"))
+
+        painter.setPen(QPen(QColor("#1d2b3d"), 1))
+        for x in range(0, w, 32):
+            painter.drawLine(x, 0, x, h)
+        for y in range(0, h, 32):
+            painter.drawLine(0, y, w, y)
+
+        painter.setPen(QColor("#9fb3c8"))
+        painter.setFont(QFont("Segoe UI", 9))
+        painter.drawText(12, 22, self.summary)
+
+        if not self.vertices:
+            painter.setPen(QColor("#5f7390"))
+            painter.drawText(12, 48, "3D preview appears here for OBJ/STL. URDF shows structure summary.")
+            return
+
+        xs = [v[0] for v in self.vertices]
+        ys = [v[1] for v in self.vertices]
+        zs = [v[2] for v in self.vertices]
+        cx, cy, cz = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2, (min(zs) + max(zs)) / 2
+        span = max(max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs), 1e-6)
+        scale = min(w, h) * 0.62 / span
+
+        def project(v: tuple[float, float, float]) -> QPointF:
+            x, y, z = v[0] - cx, v[1] - cy, v[2] - cz
+            px = (x - y) * 0.78
+            py = (x + y) * 0.34 - z
+            return QPointF(w / 2 + px * scale, h / 2 + py * scale)
+
+        painter.setPen(QPen(QColor("#58a6ff"), 1))
+        for a, b in self.edges[:8000]:
+            painter.drawLine(project(self.vertices[a]), project(self.vertices[b]))
+        painter.setPen(QPen(QColor("#7dd3fc"), 3))
+        for vertex in self.vertices[:120]:
+            painter.drawPoint(project(vertex))
+
+
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -259,6 +507,7 @@ class MainWindow(QMainWindow):
         self._all_dirs: list[str] = []
         self._ai_turns: list[tuple[str, str]] = []
         self._sim_running = False
+        self._resize_active = False
         self.setAcceptDrops(True)
 
         self.setWindowTitle(f"Lappa - ROS2 Package IDE - v{__version__}")
@@ -280,6 +529,9 @@ class MainWindow(QMainWindow):
         self.setStatusBar(QStatusBar())
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick_sim)
+        self._resize_timer = QTimer(self)
+        self._resize_timer.setSingleShot(True)
+        self._resize_timer.timeout.connect(self._finish_resize)
 
         self._reload_workspace_packages(open_active=False)
         self.pkg_combo.currentIndexChanged.connect(self._editor_load_current_package)
@@ -320,14 +572,19 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.header_file_label, 1)
 
         b_save = _button("Save", primary=True, compact=True)
+        b_save.setIcon(_icon("save"))
         b_save.clicked.connect(self._editor_save)
         b_reload = _button("Reload", compact=True)
+        b_reload.setIcon(_icon("refresh"))
         b_reload.clicked.connect(self._editor_reload)
         b_run = _button("Run", primary=True, compact=True)
+        b_run.setIcon(_icon("play"))
         b_run.clicked.connect(self.sim_run)
         b_stop = _button("Stop", compact=True)
+        b_stop.setIcon(_icon("stop"))
         b_stop.clicked.connect(self.sim_stop)
         b_docker = _button("Docker", compact=True)
+        b_docker.setIcon(_icon("docker"))
         b_docker.clicked.connect(self._editor_docker_launch)
         for button in (b_save, b_reload, b_run, b_stop, b_docker):
             layout.addWidget(button)
@@ -338,6 +595,8 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setObjectName("workspace")
         splitter.setChildrenCollapsible(False)
+        splitter.setOpaqueResize(False)
+        splitter.setHandleWidth(6)
         splitter.addWidget(self._build_project_panel())
         splitter.addWidget(self._build_editor_panel())
         splitter.addWidget(self._build_sim_panel())
@@ -357,11 +616,11 @@ class MainWindow(QMainWindow):
         rail_layout = QVBoxLayout(rail)
         rail_layout.setContentsMargins(4, 8, 4, 8)
         rail_layout.setSpacing(6)
-        b_files = _tool_button("EX", "Explorer")
+        b_files = _tool_button("explorer", "Explorer")
         b_files.clicked.connect(lambda: self.ed_file_tree.setFocus())
-        b_run = _tool_button("Run", "Run active package simulation")
+        b_run = _tool_button("play", "Run simulation")
         b_run.clicked.connect(self.sim_run)
-        b_ai = _tool_button("AI", "Open AI chat panel")
+        b_ai = _tool_button("ai", "AI chat")
         b_ai.clicked.connect(self._focus_ai_panel)
         for button in (b_files, b_run, b_ai):
             rail_layout.addWidget(button)
@@ -380,15 +639,15 @@ class MainWindow(QMainWindow):
         title.setObjectName("panelTitleSmall")
         title_row.addWidget(title)
         title_row.addStretch(1)
-        b_open = _toolbar_button("Open", "Open workspace folder", 48)
+        b_open = _toolbar_button("folder", "Open workspace folder")
         b_open.clicked.connect(self._add_workspace_folder)
-        b_pkg = _toolbar_button("Pkg", "Add ROS package", 34)
+        b_pkg = _toolbar_button("cube", "Add ROS package")
         b_pkg.clicked.connect(self._add_workspace_package)
-        b_new_file = _toolbar_button("+F", "New file", 30)
+        b_new_file = _toolbar_button("file-plus", "New file")
         b_new_file.clicked.connect(self._create_new_file)
-        b_new_dir = _toolbar_button("+D", "New folder", 30)
+        b_new_dir = _toolbar_button("folder-plus", "New folder")
         b_new_dir.clicked.connect(self._create_new_folder)
-        b_refresh = _toolbar_button("R", "Refresh workspace", 28)
+        b_refresh = _toolbar_button("refresh", "Refresh workspace")
         b_refresh.clicked.connect(lambda: self._reload_workspace_packages())
         title_row.addWidget(b_open)
         title_row.addWidget(b_pkg)
@@ -409,6 +668,8 @@ class MainWindow(QMainWindow):
         self.ed_file_tree = QTreeWidget()
         self.ed_file_tree.setObjectName("fileTree")
         self.ed_file_tree.setHeaderHidden(True)
+        self.ed_file_tree.setAnimated(False)
+        self.ed_file_tree.setUniformRowHeights(True)
         self.ed_file_tree.itemClicked.connect(self._editor_open_file)
         self.ed_file_tree.itemActivated.connect(self._editor_open_file)
         layout.addWidget(self.ed_file_tree, 1)
@@ -422,7 +683,7 @@ class MainWindow(QMainWindow):
         package_row = QHBoxLayout()
         package_row.addWidget(_section("Packages"))
         package_row.addStretch(1)
-        b_new_workspace = _toolbar_button("New", "New empty workspace", 42)
+        b_new_workspace = _toolbar_button("reset", "New empty workspace")
         b_new_workspace.clicked.connect(self._new_workspace)
         package_row.addWidget(b_new_workspace)
         layout.addLayout(package_row)
@@ -461,6 +722,8 @@ class MainWindow(QMainWindow):
         center_splitter = QSplitter(Qt.Orientation.Vertical)
         center_splitter.setObjectName("centerSplitter")
         center_splitter.setChildrenCollapsible(False)
+        center_splitter.setOpaqueResize(False)
+        center_splitter.setHandleWidth(7)
 
         editor_body = QFrame()
         editor_body.setObjectName("editorBody")
@@ -473,7 +736,19 @@ class MainWindow(QMainWindow):
         mono = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
         mono.setPointSize(11)
         self.ed_text.setFont(mono)
-        editor_layout.addWidget(self.ed_text, 1)
+
+        self.editor_view_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.editor_view_splitter.setObjectName("editorViewSplitter")
+        self.editor_view_splitter.setChildrenCollapsible(False)
+        self.editor_view_splitter.setOpaqueResize(False)
+        self.editor_view_splitter.setHandleWidth(6)
+        self.editor_view_splitter.addWidget(self.ed_text)
+        self.model_preview = ModelPreview()
+        self.model_preview.setObjectName("modelPreview")
+        self.editor_view_splitter.addWidget(self.model_preview)
+        self.editor_view_splitter.setSizes([900, 0])
+        self.model_preview.hide()
+        editor_layout.addWidget(self.editor_view_splitter, 1)
         center_splitter.addWidget(editor_body)
 
         self.ops_tabs = QTabWidget()
@@ -578,8 +853,8 @@ class MainWindow(QMainWindow):
         self.ai_log.setReadOnly(True)
         self.ai_log.setPlaceholderText("AI assistant conversation")
         self.ai_log.setPlainText(
-            "Lappa AI ready.\n"
-            "Ask about the active ROS package, current file, launch setup, or simulation behavior."
+            "Lappa AI Assistant ready.\n"
+            "Ask for a package review, ROS launch check, code explanation, or simulation guidance."
         )
         layout.addWidget(self.ai_log, 1)
 
@@ -726,6 +1001,17 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(msg)
         self._log(msg)
 
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        if hasattr(self, "_resize_timer"):
+            self._resize_active = True
+            self._resize_timer.start(140)
+
+    def _finish_resize(self) -> None:
+        self._resize_active = False
+        if hasattr(self, "canvas"):
+            self.canvas.update()
+
     def _log(self, msg: str) -> None:
         if hasattr(self, "event_log"):
             self.event_log.append(msg)
@@ -750,10 +1036,10 @@ class MainWindow(QMainWindow):
         package_label = pkg.name if pkg else "no package"
         self.ai_log.append(f"\nYou: {prompt}")
         self.ai_log.append(
-            "Lappa AI: I have the IDE context now: "
+            "Lappa AI: Context captured for "
             f"package={package_label}, file={file_label}. "
-            "The chat panel is wired for the desktop workflow; connect the model backend here "
-            "to turn this into code edits, ROS launch checks, and simulation guidance."
+            "Suggested review path: package.xml, launch files, node entry points, URDF/mesh refs, "
+            "then run native simulation to verify pose, twist, lidar, and hot-reload behavior."
         )
         self._focus_ai_panel()
 
@@ -810,6 +1096,9 @@ class MainWindow(QMainWindow):
     def _active_package_name(self) -> str:
         pkg = self._active_package()
         return pkg.name if pkg else "diff_drive_2w"
+
+    def _is_3d_file(self, rel: str) -> bool:
+        return Path(rel).suffix.lower() in {".obj", ".stl", ".dae", ".urdf", ".xml"}
 
     def _refresh_workspace_roots(self) -> None:
         if not hasattr(self, "workspace_roots_list"):
@@ -1064,6 +1353,7 @@ class MainWindow(QMainWindow):
                 if item is None:
                     item = QTreeWidgetItem([part])
                     item.setData(0, Qt.ItemDataRole.UserRole, None)
+                    item.setIcon(0, _icon("folder"))
                     if parent:
                         parent.addChild(item)
                     else:
@@ -1077,6 +1367,7 @@ class MainWindow(QMainWindow):
                 self.ed_file_tree.addTopLevelItem(item)
             if file_rel:
                 item.setData(0, Qt.ItemDataRole.UserRole, file_rel)
+                item.setIcon(0, _icon("cube" if self._is_3d_file(file_rel) else "file"))
             return item
 
         for rel in self._all_dirs:
@@ -1114,6 +1405,13 @@ class MainWindow(QMainWindow):
             return
         self._editor_rel = rel
         self.ed_text.setPlainText(text)
+        if self._is_3d_file(rel):
+            self.model_preview.show()
+            self.model_preview.load_text(rel, text)
+            self.editor_view_splitter.setSizes([620, 360])
+        else:
+            self.model_preview.hide()
+            self.editor_view_splitter.setSizes([900, 0])
         display = f"{self._editor_pkg.name}/{rel}"
         self.ed_path_label.setText(display)
         self.header_file_label.setText(display)
@@ -1132,6 +1430,8 @@ class MainWindow(QMainWindow):
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Save failed", str(exc))
             return
+        if self._is_3d_file(self._editor_rel):
+            self.model_preview.load_text(self._editor_rel, self.ed_text.toPlainText())
         SESSION.notify_file_change(self._editor_rel)
         self._status(f"Saved {self._editor_pkg.name}/{self._editor_rel}")
 
@@ -1165,6 +1465,8 @@ class MainWindow(QMainWindow):
 
     def _tick_sim(self) -> None:
         if not self._sim_running:
+            return
+        if self._resize_active:
             return
         lx = self.sl_lx.value() / 100.0
         ly = self.sl_ly.value() / 100.0

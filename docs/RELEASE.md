@@ -7,7 +7,7 @@ Produce standalone binaries:
 | `lappa-windows-x64.exe` | Windows 10/11 x64 |
 | `lappa-linux-x64` | Linux x64 |
 
-Stack: **PyInstaller onefile** + PySide6 Qt desktop IDE. Double-click / run with no args opens the desktop package editor.
+Stack: **PyInstaller onefile** + PySide6 Qt desktop IDE + bundled Lappa app icon. Double-click / run with no args opens the desktop package editor.
 
 ## Local build
 

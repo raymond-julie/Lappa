@@ -1,7 +1,11 @@
 # Lappa
 
+<p align="center">
+  <img src="docs/assets/lappa-icon.svg" alt="Lappa app icon" width="96" height="96" />
+</p>
+
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![Version](https://img.shields.io/badge/version-0.4.28-0E8A16.svg)](packages/server/pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.4.29-0E8A16.svg)](packages/server/pyproject.toml)
 [![GUI-PySide6](https://img.shields.io/badge/GUI-PySide6-41CD52.svg)](packages/server/src/lappa/gui/)
 [![ROS2](https://img.shields.io/badge/ROS2-Humble%20%7C%20Jazzy%20%7C%20Rolling-22314E.svg)](https://docs.ros.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -11,7 +15,7 @@
 
 | Surface | Role |
 | --- | --- |
-| **Qt desktop IDE** (`lappa-gui`) | Workspace package explorer + editor + simulation + Docker controls |
+| **Qt desktop IDE** (`lappa-gui`) | Workspace explorer + text/3D editor + AI chat + simulation |
 | **Native sim** | Offline kinematics when Docker is unavailable |
 | **Docker** | Real ROS2 distro; bundled sample packages mount into `/ws/src` for IDE↔container bridge |
 
@@ -47,6 +51,7 @@
 | **IDE ↔ Docker bridge** | `lappa docker launch --demo <pkg>` runs `sim.launch.py` on mounted sources |
 | **Offline native sim** | Diff-drive, omni, tricycle, ackermann, planar arm — pose, twist, lidar, joints |
 | **Lidar obstacles** | Default obstacle map for denser synthetic scans |
+| **3D view in editor** | Open OBJ/STL/URDF with text and 3D/wireframe preview in the same editor pane |
 | **3D mesh fit** | Procedural OBJ library + AABB fit + multi-link `build-robot` |
 | **No host ROS2 required** | Workspace editing + native sim without ROS2 desktop; Docker optional |
 | **Multi-distro targets** | Humble · Iron · Jazzy · Kilted · Rolling (Dockerfile rewrite) |
@@ -74,10 +79,18 @@ lappa gui
 | --- | --- |
 | **Workspace** | Add folders/packages, refresh scan, open package roots discovered by `package.xml` |
 | **Editor** | **Open package files, edit, save** from the active workspace package |
+| **3D view** | Mesh/URDF files open as text + preview in one resizable editor pane |
 | **Simulation** | Start/stop **native** sim, teleop, 2D canvas + lidar, trajectory |
 | **3D models** | Build aligned multi-link robot meshes for a demo package |
 | **Packages** | List / create colcon-ready zip bundles |
 | **ROS2 / Docker** | Distro select, start container, **launch package sim in Docker** |
+
+### Desktop polish
+
+- Branded Lappa app icon for the Qt window, taskbar, and Windows release executable.
+- Compact IDE layout: activity rail, Explorer tree, center editor, bottom AI Assistant, right live simulation.
+- Resizable panes without live repaint flicker while dragging splitters.
+- OBJ/STL/DAE/URDF files open as text plus a 3D/structure preview in the same editor pane.
 
 <p align="center">
   <img src="docs/screenshots/gui-sim.png" alt="Lappa GUI — Simulation" width="100%" />
@@ -159,7 +172,7 @@ lappa serve --port 8840   # optional local FastAPI automation API
 
 | Command | Description |
 | --- | --- |
-| `lappa version` | Package version (**0.4.28**) |
+| `lappa version` | Package version (**0.4.29**) |
 | `lappa demo` | Offline smoke: engines + 3D robot + bundle + trajectory |
 | `lappa gui` / **`lappa-gui`** | **Qt desktop app** (needs `.[gui]`) |
 | `lappa demos list` | List robot demos |

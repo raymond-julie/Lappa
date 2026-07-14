@@ -12,12 +12,16 @@ SERVER = SPECDIR
 PACKAGES = SERVER.parent
 DEMOS = PACKAGES / "demos"
 DOCKER = PACKAGES / "docker"
+ASSETS = SERVER / "src" / "lappa" / "assets"
+ICON = ASSETS / "lappa.ico"
 
 datas = []
 if DEMOS.is_dir():
     datas.append((str(DEMOS), "demos"))
 if DOCKER.is_dir():
     datas.append((str(DOCKER), "docker"))
+if ASSETS.is_dir():
+    datas.append((str(ASSETS), "lappa/assets"))
 
 hiddenimports = [
     "uvicorn",
@@ -94,4 +98,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=str(ICON) if ICON.is_file() else None,
 )

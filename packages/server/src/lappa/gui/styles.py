@@ -170,6 +170,12 @@ QPlainTextEdit#codeEditor {
   font-family: "Cascadia Mono", "Consolas", monospace;
 }
 
+QWidget#modelPreview {
+  background: #080d18;
+  border: 1px solid #263449;
+  border-radius: 5px;
+}
+
 QTextEdit#logBox {
   background: #080d18;
   color: #bfd2e8;
@@ -230,6 +236,13 @@ QSplitter#centerSplitter::handle:vertical {
   background: #172033;
   border-top: 1px solid #263449;
   border-bottom: 1px solid #263449;
+}
+
+QSplitter#editorViewSplitter::handle:horizontal {
+  width: 6px;
+  background: #172033;
+  border-left: 1px solid #263449;
+  border-right: 1px solid #263449;
 }
 
 QStatusBar {
