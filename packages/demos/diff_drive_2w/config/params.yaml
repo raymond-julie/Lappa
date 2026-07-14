@@ -2,3 +2,6 @@
 max_linear: 1.0
 max_angular: 1.5
 lidar_rays: 36
+
+# Cycle 2026-07-14: sim reports idle_time when robot stops longer than this
+idle_timeout_sec: 2.5
