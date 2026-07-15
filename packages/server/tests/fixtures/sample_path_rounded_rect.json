@@ -1,0 +1,45 @@
+{
+  "name": "polyline_rounded_rect",
+  "points": [
+    [
+      0,
+      0
+    ],
+    [
+      8,
+      0
+    ],
+    [
+      10,
+      1
+    ],
+    [
+      10,
+      5
+    ],
+    [
+      8,
+      6
+    ],
+    [
+      0,
+      6
+    ],
+    [
+      -1,
+      5
+    ],
+    [
+      -1,
+      1
+    ],
+    [
+      0,
+      0
+    ]
+  ],
+  "path_length_m": 31.30056307974577,
+  "expected_net_displacement_m": 0.0,
+  "closed": true,
+  "note": "Closed rounded-rectangle path for sim fixtures"
+}
