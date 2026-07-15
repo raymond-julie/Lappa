@@ -1,0 +1,29 @@
+{
+  "name": "polyline_diamond_loop",
+  "points": [
+    [
+      0,
+      2
+    ],
+    [
+      2,
+      0
+    ],
+    [
+      4,
+      2
+    ],
+    [
+      2,
+      4
+    ],
+    [
+      0,
+      2
+    ]
+  ],
+  "path_length_m": 11.313708498984761,
+  "expected_net_displacement_m": 0.0,
+  "closed": true,
+  "note": "Closed diamond loop path for sim fixtures"
+}
