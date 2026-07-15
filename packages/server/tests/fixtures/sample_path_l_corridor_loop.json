@@ -1,0 +1,37 @@
+{
+  "name": "polyline_l_corridor_loop",
+  "points": [
+    [
+      0,
+      0
+    ],
+    [
+      8,
+      0
+    ],
+    [
+      8,
+      5
+    ],
+    [
+      3,
+      5
+    ],
+    [
+      3,
+      2
+    ],
+    [
+      0,
+      2
+    ],
+    [
+      0,
+      0
+    ]
+  ],
+  "path_length_m": 26.0,
+  "expected_net_displacement_m": 0.0,
+  "closed": true,
+  "note": "L-shaped corridor loop path for sim fixtures"
+}
