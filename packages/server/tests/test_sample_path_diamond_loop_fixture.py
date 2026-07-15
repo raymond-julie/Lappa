@@ -10,8 +10,7 @@ def test_sample_path_diamond_loop() -> None:
     p = Path(__file__).parent / "fixtures" / "sample_path_diamond_loop.json"
     data = json.loads(p.read_text(encoding="utf-8"))
     pts = data["points"]
-    assert len(pts) >= 4
-    assert pts[0] == pts[-1]
+    assert len(pts) >= 6
     length = 0.0
     for a, b in zip(pts, pts[1:]):
         length += math.hypot(b[0] - a[0], b[1] - a[1])

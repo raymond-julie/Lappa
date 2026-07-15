@@ -3,27 +3,43 @@
   "points": [
     [
       0,
-      2
-    ],
-    [
-      2,
       0
     ],
     [
-      4,
+      1,
       2
     ],
     [
-      2,
-      4
+      3,
+      3
+    ],
+    [
+      5,
+      2
+    ],
+    [
+      6,
+      0
+    ],
+    [
+      5,
+      -2
+    ],
+    [
+      3,
+      -3
+    ],
+    [
+      1,
+      -2
     ],
     [
       0,
-      2
+      0
     ]
   ],
-  "path_length_m": 11.313708498984761,
+  "path_length_m": 17.88854381999832,
   "expected_net_displacement_m": 0.0,
   "closed": true,
-  "note": "Closed diamond loop path for sim fixtures"
+  "note": "Closed diamond-like loop for sim fixtures"
 }
