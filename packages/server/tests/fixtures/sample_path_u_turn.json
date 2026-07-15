@@ -1,24 +1,29 @@
 {
-  "name": "u_turn_corridor",
+  "name": "polyline_u_turn",
   "points": [
     [
       0,
       0
     ],
     [
-      3,
+      6,
       0
     ],
     [
-      3,
-      2
+      6,
+      3
     ],
     [
       0,
-      2
+      3
+    ],
+    [
+      0,
+      1
     ]
   ],
-  "path_length_m": 8.0,
-  "expected_net_displacement_m": 2.0,
-  "note": "U-turn: length 8, net 2"
+  "path_length_m": 17.0,
+  "expected_net_displacement_m": 1.0,
+  "closed": false,
+  "note": "Open U-turn path for sim fixtures"
 }
