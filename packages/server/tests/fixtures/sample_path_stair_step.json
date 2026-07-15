@@ -1,0 +1,37 @@
+{
+  "name": "polyline_stair_step",
+  "points": [
+    [
+      0,
+      0
+    ],
+    [
+      4,
+      0
+    ],
+    [
+      4,
+      2
+    ],
+    [
+      2,
+      2
+    ],
+    [
+      2,
+      4
+    ],
+    [
+      0,
+      4
+    ],
+    [
+      0,
+      0
+    ]
+  ],
+  "path_length_m": 16.0,
+  "expected_net_displacement_m": 0.0,
+  "closed": true,
+  "note": "Closed stair-step path for sim fixtures"
+}
