@@ -1,0 +1,41 @@
+{
+  "name": "polyline_spiral_expand",
+  "points": [
+    [
+      0,
+      0
+    ],
+    [
+      2,
+      0
+    ],
+    [
+      2,
+      2
+    ],
+    [
+      0,
+      2
+    ],
+    [
+      0,
+      4
+    ],
+    [
+      4,
+      4
+    ],
+    [
+      4,
+      0
+    ],
+    [
+      6,
+      0
+    ]
+  ],
+  "path_length_m": 18.0,
+  "expected_net_displacement_m": 6.0,
+  "closed": false,
+  "note": "Expanding spiral-ish path for sim fixtures"
+}
