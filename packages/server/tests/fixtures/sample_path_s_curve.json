@@ -1,0 +1,33 @@
+{
+  "name": "polyline_s_curve",
+  "points": [
+    [
+      0,
+      0
+    ],
+    [
+      2,
+      1
+    ],
+    [
+      4,
+      1
+    ],
+    [
+      6,
+      0
+    ],
+    [
+      8,
+      1
+    ],
+    [
+      10,
+      1
+    ]
+  ],
+  "path_length_m": 10.70820393249937,
+  "expected_net_displacement_m": 10.04987562112089,
+  "closed": false,
+  "note": "Open S-curve path for sim fixtures"
+}
