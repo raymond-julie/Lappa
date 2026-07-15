@@ -1,0 +1,29 @@
+{
+  "name": "polyline_arc_quarter",
+  "points": [
+    [
+      0,
+      0
+    ],
+    [
+      2,
+      0.5
+    ],
+    [
+      3.5,
+      1.5
+    ],
+    [
+      4.5,
+      3
+    ],
+    [
+      5,
+      5
+    ]
+  ],
+  "path_length_m": 7.728656901081649,
+  "expected_net_displacement_m": 7.0710678118654755,
+  "closed": false,
+  "note": "Open arc-like path for sim fixtures"
+}
