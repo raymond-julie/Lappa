@@ -1,0 +1,33 @@
+{
+  "name": "polyline_corridor_zigzag",
+  "points": [
+    [
+      0,
+      0
+    ],
+    [
+      3,
+      0
+    ],
+    [
+      3,
+      2
+    ],
+    [
+      6,
+      2
+    ],
+    [
+      6,
+      4
+    ],
+    [
+      9,
+      4
+    ]
+  ],
+  "path_length_m": 13.0,
+  "expected_net_displacement_m": 9.848857801796104,
+  "closed": false,
+  "note": "Open zigzag corridor path for sim fixtures"
+}
