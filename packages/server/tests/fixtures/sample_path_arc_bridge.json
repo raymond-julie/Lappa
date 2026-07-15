@@ -1,0 +1,33 @@
+{
+  "name": "polyline_arc_bridge",
+  "points": [
+    [
+      0,
+      0
+    ],
+    [
+      1,
+      2
+    ],
+    [
+      3,
+      3
+    ],
+    [
+      5,
+      3
+    ],
+    [
+      7,
+      2
+    ],
+    [
+      8,
+      0
+    ]
+  ],
+  "path_length_m": 10.94427190999916,
+  "expected_net_displacement_m": 8.0,
+  "closed": false,
+  "note": "Open arc-like bridge path for sim fixtures"
+}
