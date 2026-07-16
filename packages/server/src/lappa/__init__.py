@@ -1,3 +1,3 @@
 """Lappa — ROS2 package IDE server."""
 
-__version__ = "0.4.58"
+__version__ = "0.4.59"

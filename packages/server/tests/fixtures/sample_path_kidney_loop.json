@@ -1,0 +1,53 @@
+{
+  "name": "polyline_kidney_loop",
+  "points": [
+    [
+      0,
+      0
+    ],
+    [
+      3,
+      1
+    ],
+    [
+      5,
+      3
+    ],
+    [
+      6,
+      6
+    ],
+    [
+      5,
+      9
+    ],
+    [
+      3,
+      11
+    ],
+    [
+      0,
+      12
+    ],
+    [
+      -2,
+      10
+    ],
+    [
+      -3,
+      7
+    ],
+    [
+      -2,
+      3
+    ],
+    [
+      0,
+      0
+    ]
+  ],
+  "path_length_m": 32.02532657616212,
+  "expected_net_displacement_m": 0.0,
+  "closed": true,
+  "note": "Closed kidney-shaped loop for sim fixtures"
+}

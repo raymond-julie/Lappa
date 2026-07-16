@@ -1,7 +1,8 @@
 {
-    "name": "square_loop",
-    "points": [[0,0],[4,0],[4,4],[0,4],[0,0]],
-    "path_length_m": 16.0,
-    "expected_net_displacement_m": 0.0,
-    "note": "4m x 4m square loop, closed circuit"
+  "name": "square_loop",
+  "points": [[0, 0], [5, 0], [5, 5], [0, 5], [0, 0]],
+  "path_length_m": 20.0,
+  "expected_net_displacement_m": 0.0,
+  "closed": true,
+  "note": "5m x 5m square loop, closed circuit (path_stats CLI fixture)"
 }
