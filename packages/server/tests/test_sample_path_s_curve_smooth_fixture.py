@@ -1,4 +1,4 @@
-"""Square loop path fixture smoke."""
+"""S-curve smooth path fixture smoke."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import math
 from pathlib import Path
 
 
-def test_sample_path_square_loop() -> None:
-    p = Path(__file__).parent / "fixtures" / "sample_path_square_loop.json"
+def test_sample_path_s_curve_smooth() -> None:
+    p = Path(__file__).parent / "fixtures" / "sample_path_s_curve_smooth.json"
     data = json.loads(p.read_text(encoding="utf-8"))
     pts = data["points"]
     assert len(pts) >= 4
