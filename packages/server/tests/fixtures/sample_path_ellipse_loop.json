@@ -1,0 +1,45 @@
+{
+  "name": "polyline_ellipse_loop",
+  "points": [
+    [
+      0,
+      0
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      5,
+      4
+    ],
+    [
+      8,
+      3
+    ],
+    [
+      10,
+      0
+    ],
+    [
+      8,
+      -3
+    ],
+    [
+      5,
+      -4
+    ],
+    [
+      2,
+      -3
+    ],
+    [
+      0,
+      0
+    ]
+  ],
+  "path_length_m": 27.07131574252947,
+  "expected_net_displacement_m": 0.0,
+  "closed": true,
+  "note": "Closed ellipse-like loop for sim fixtures"
+}
