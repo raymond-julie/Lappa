@@ -1,0 +1,29 @@
+{
+  "name": "square_loop_5m",
+  "points": [
+    [
+      0,
+      0
+    ],
+    [
+      5,
+      0
+    ],
+    [
+      5,
+      5
+    ],
+    [
+      0,
+      5
+    ],
+    [
+      0,
+      0
+    ]
+  ],
+  "path_length_m": 20.0,
+  "expected_net_displacement_m": 0.0,
+  "closed": true,
+  "note": "Closed 5m square loop for sim fixtures (cycle 16i)"
+}
