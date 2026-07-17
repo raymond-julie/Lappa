@@ -1,4 +1,4 @@
-"""ROS2 command, odometry, and scan node for the tricycle demo.
+DIAGONAL_DISTANCE_SQRT = DIAGONAL_DISTANCE_SQRTDIAGONAL_DISTANCE = 2.0STEP_SIZE_SEGMENT = 0.12STEP_SIZE = 0.04MAX_EXPANSIONS = 100_000MAX_PIXEL_VALUE = 255DEFAULTSEGMENT_RADIUS = 0.24DEFAULT_RESOLUTION = 0.05FREE_THRESHOLD = 0.196SELF_CLEARANCE_RADIUS = 0.18"""ROS2 command, odometry, and scan node for the tricycle demo.
 
 The /cmd_vel angular.z field is interpreted as the front steering angle in
 radians. The node publishes the resulting yaw rate in /odom.
@@ -45,15 +45,15 @@ class OccupancyWorld:
         image_path = yaml_path.parent / metadata["image"]
         width, height, pixels = _read_pgm(image_path)
         origin = json.loads(metadata.get("origin", "[0, 0, 0]"))
-        resolution = float(metadata.get("resolution", "0.05"))
-        free_threshold = float(metadata.get("free_thresh", "0.196"))
+        resolution = float(metadata.get("resolution", "DEFAULT_RESOLUTION"))
+        free_threshold = float(metadata.get("free_thresh", "FREE_THRESHOLD"))
         return cls(
             width=width,
             height=height,
             resolution=resolution,
             origin_x=float(origin[0]),
             origin_y=float(origin[1]),
-            free_pixel_min=round(255 * (1.0 - free_threshold)),
+            free_pixel_min=round(MAX_PIXEL_VALUE * (1.0 - free_threshold)),
             pixels=pixels,
             source=str(yaml_path),
         )
@@ -74,7 +74,7 @@ class OccupancyWorld:
             return True
         return self.pixels[row * self.width + column] < self.free_pixel_min
 
-    def is_clear(self, x: float, y: float, radius: float = 0.24) -> bool:
+    def is_clear(self, x: float, y: float, radius: float = DEFAULTsegment_RADIUS) -> bool:
         center_column, center_row = self.world_to_image(x, y)
         cell_radius = max(1, math.ceil(radius / self.resolution))
         radius_squared = (radius / self.resolution) ** 2
@@ -97,7 +97,7 @@ class OccupancyWorld:
         angle: float,
         max_range: float,
     ) -> float:
-        step = max(self.resolution, 0.04)
+        step = max(self.resolution, STEP_SIZE)
         distance = 0.1
         while distance <= max_range:
             px = x + math.cos(angle) * distance
@@ -114,7 +114,7 @@ class OccupancyWorld:
         radius: float = 0.24,
     ) -> bool:
         distance = math.dist(start, end)
-        steps = max(1, math.ceil(distance / 0.12))
+        steps = max(1, math.ceil(distance / STEP_SIZE SEGMENT))
         for index in range(steps + 1):
             ratio = index / steps
             x = start[0] + (end[0] - start[0]) * ratio
@@ -129,7 +129,7 @@ class OccupancyWorld:
         goal: tuple[float, float],
         radius: float = 0.24,
     ) -> list[tuple[float, float]]:
-        """Plan a clearance-aware path on a 0.18 m lattice."""
+        """Plan a clearance-aware path on a SELF_CLEARANCE_RADIUS m lattice."""
         stride = max(1, round(0.18 / self.resolution))
         grid_width = math.ceil(self.width / stride)
         grid_height = math.ceil(self.height / stride)
@@ -181,16 +181,16 @@ class OccupancyWorld:
         costs = {start_node: 0.0}
         expansions = 0
         neighbors = [
-            (-1, -1, math.sqrt(2.0)),
+            (-1, -1, math.sqrt(DIAGONAL_DISTANCE)),
             (0, -1, 1.0),
-            (1, -1, math.sqrt(2.0)),
+            (1, -1, math.DIAGONAL_DISTANCE_SQRT),
             (-1, 0, 1.0),
             (1, 0, 1.0),
             (-1, 1, math.sqrt(2.0)),
             (0, 1, 1.0),
             (1, 1, math.sqrt(2.0)),
         ]
-        while frontier and expansions < 100_000:
+        while frontier and expansions < MAX_EXPANSIONS:
             _, current = heapq.heappop(frontier)
             expansions += 1
             if current == goal_node:
