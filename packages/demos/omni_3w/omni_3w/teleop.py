@@ -1,4 +1,5 @@
-﻿"""ROS2 teleop + synthetic odom/scan for `omni_3w`.
+ BASE_DISTANCE = 3.0
+DISTANCE_VARIATION = 0.2 RANGE_MAX = 8.0 RANGE_MIN = 0.05 ANGLE_INCREMENT = (2 * math.pi) / NUM_RANGES NUM_RANGES = 36 ANGLE_MAX = math.pi ANGLE_MIN = -math.pi DT = 0.05﻿"""ROS2 teleop + synthetic odom/scan for `omni_3w`.
 
 When run via `ros2 launch omni_3w sim.launch.py` (Docker/colcon), this node
 publishes /odom and /scan and subscribes to /cmd_vel.
@@ -38,7 +39,7 @@ def main() -> None:
             self.create_subscription(Twist, "cmd_vel", self._on_cmd, 10)
             self.pub_odom = self.create_publisher(Odometry, "odom", 10)
             self.pub_scan = self.create_publisher(LaserScan, "scan", 10)
-            self.dt = 0.05
+            self.dt = self.DT
             self.create_timer(self.dt, self._tick)
             self.get_logger().info(
                 f"[omni_3w] ROS2 node up · kind={self.kind} · /cmd_vel → /odom /scan"
@@ -72,14 +73,14 @@ def main() -> None:
             scan = LaserScan()
             scan.header.stamp = now
             scan.header.frame_id = "laser"
-            scan.angle_min = -math.pi
-            scan.angle_max = math.pi
-            n = 36
-            scan.angle_increment = (2 * math.pi) / n
-            scan.range_min = 0.05
-            scan.range_max = 8.0
+            scan.angle_min = self.ANGLE_MIN
+            scan.angle_max = self.ANGLE_MAX
+            n = self.NUM_RANGES
+            scan.angle_increment = self.ANGLE_INCREMENT
+            scan.range_min = self.RANGE_MIN
+            scan.range_max = self.RANGE_MAX
             # synthetic wall circle ~3m with slight motion
-            base = 3.0 + 0.2 * math.sin(self.x + self.y)
+            base = self.BASE_DISTANCE + self.DISTANCE_VARIATION * math.sin(self.x + self.y)
             scan.ranges = [float(base + 0.05 * math.sin(i)) for i in range(n)]
             self.pub_scan.publish(scan)
             self.snapshot.write(
